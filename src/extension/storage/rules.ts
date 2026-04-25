@@ -77,6 +77,16 @@ function specificity(scope: ApprovalRule['scope']): number {
   }
 }
 
+function safeRegexTest(pattern: string, value: string): boolean {
+  try {
+    return new RegExp(pattern).test(value)
+  } catch {
+    // Bad pattern in stored rule — treat as non-match instead of crashing the
+    // approval lookup. The malformed rule effectively becomes inert until removed.
+    return false
+  }
+}
+
 function matchesScope(
   scope: ApprovalRule['scope'],
   query: { origin?: string; selector?: string; url?: string },
@@ -89,11 +99,11 @@ function matchesScope(
     case 'originAndSelector': {
       if (query.origin !== scope.origin) return false
       if (!query.selector) return false
-      return query.selector === scope.selectorPattern || new RegExp(scope.selectorPattern).test(query.selector)
+      return query.selector === scope.selectorPattern || safeRegexTest(scope.selectorPattern, query.selector)
     }
     case 'urlPattern':
       if (!query.url) return false
-      return new RegExp(scope.pattern).test(query.url)
+      return safeRegexTest(scope.pattern, query.url)
   }
 }
 

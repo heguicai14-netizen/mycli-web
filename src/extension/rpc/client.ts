@@ -36,6 +36,9 @@ export class RpcClient {
       const p = chrome.runtime.connect({ name: this.portName })
       this.port = p
       this.connected = true
+      // Reset backoff on every successful (re)connect so the next disconnect retries
+      // quickly instead of inheriting a long delay from prior outages.
+      this.retryDelay = 1000
       p.onMessage.addListener((raw) => this._onMessage(raw))
       p.onDisconnect.addListener(() => this._onDisconnect())
       queueMicrotask(() => resolve())
