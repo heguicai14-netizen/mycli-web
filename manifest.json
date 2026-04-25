@@ -1,0 +1,61 @@
+{
+  "manifest_version": 3,
+  "name": "mycli-web",
+  "version": "0.1.0",
+  "description": "Chrome browser-agent extension (mycli web port).",
+  "action": {
+    "default_title": "Toggle mycli-web chat"
+  },
+  "background": {
+    "service_worker": "src/extension/background.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/extension/content/index.tsx"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "options_page": "html/options.html",
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting",
+    "activeTab",
+    "offscreen",
+    "bookmarks",
+    "history",
+    "downloads",
+    "alarms"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "commands": {
+    "toggle-chat": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+K",
+        "mac": "Command+Shift+K"
+      },
+      "description": "Toggle mycli-web chat window"
+    }
+  },
+  "sandbox": {
+    "pages": ["html/sandbox.html"]
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["html/sandbox.html"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'",
+    "sandbox": "sandbox allow-scripts allow-forms; script-src 'self' 'unsafe-inline' 'unsafe-eval'; child-src 'self'"
+  },
+  "icons": {
+    "16": "public/icons/icon-16.png",
+    "48": "public/icons/icon-48.png",
+    "128": "public/icons/icon-128.png"
+  }
+}

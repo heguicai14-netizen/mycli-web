@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Shadow DOM root reset — prevent host page styles from leaking in */
+:host {
+  all: initial;
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
