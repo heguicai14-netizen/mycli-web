@@ -4,6 +4,9 @@ import type { z } from 'zod'
 type AnyCmd = z.infer<typeof ClientCmd>
 type AnyEvt = z.infer<typeof AgentEvent>
 
+// Distributed Omit so each discriminated-union variant retains its specific shape.
+type CmdInput<T = AnyCmd> = T extends any ? Omit<T, 'id' | 'sessionId' | 'ts'> : never
+
 type AckResult = { ok: true } | { ok: false; error: { code: string; message: string } }
 
 export interface RpcClientOptions {
@@ -82,7 +85,7 @@ export class RpcClient {
     this.port?.disconnect()
   }
 
-  async send(partial: Omit<AnyCmd, 'id' | 'sessionId' | 'ts'>): Promise<AckResult> {
+  async send(partial: CmdInput): Promise<AckResult> {
     const full = {
       id: crypto.randomUUID(),
       sessionId: this.sessionId,

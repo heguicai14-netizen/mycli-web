@@ -1,12 +1,15 @@
 import { createRoot } from 'react-dom/client'
-import { StrictMode, useState, useEffect } from 'react'
-import { Fab, ChatShell } from './fab'
-import { RpcClient } from '../rpc/client'
-import { getTransientUi, setTransientUi } from '../storage/transient'
+import { StrictMode } from 'react'
+import { ChatApp } from './ChatApp'
+import { installDomHandlers } from './domHandlers'
 import { loadSettings } from '../storage/settings'
 import contentCss from '../../styles/content.css?inline'
 
 async function mount() {
+  // Always install DOM handlers — agent should be able to drive this tab even if
+  // the user has hidden the FAB via settings.
+  installDomHandlers()
+
   const settings = await loadSettings()
   if (!settings.fab.enabled) return
 
@@ -26,35 +29,11 @@ async function mount() {
   mountNode.id = 'mycli-web-mount'
   shadow.appendChild(mountNode)
 
-  const client = new RpcClient({ portName: 'session' })
-  await client.connect()
-
-  function App() {
-    const [open, setOpen] = useState(false)
-    useEffect(() => {
-      getTransientUi().then((s) => setOpen(s.panelOpen))
-      const listener = (msg: any) => {
-        if (msg?.kind === 'content/activate') setOpen(true)
-      }
-      chrome.runtime.onMessage.addListener(listener)
-      return () => chrome.runtime.onMessage.removeListener(listener)
-    }, [])
-
-    async function toggle() {
-      const next = !open
-      setOpen(next)
-      await setTransientUi({ panelOpen: next })
-    }
-
-    return (
-      <StrictMode>
-        <Fab onClick={toggle} position={settings.fab.position} />
-        {open && <ChatShell />}
-      </StrictMode>
-    )
-  }
-
-  createRoot(mountNode).render(<App />)
+  createRoot(mountNode).render(
+    <StrictMode>
+      <ChatApp />
+    </StrictMode>,
+  )
 }
 
 if (document.readyState === 'loading') {

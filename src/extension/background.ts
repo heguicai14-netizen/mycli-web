@@ -45,6 +45,84 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
   if (tab?.id) await activateOnTab(tab.id)
 })
 
-installHub({ mode: 'echo' })
+installHub({ mode: 'offscreen-forward' })
+
+// DOM op routing: offscreen → SW → target tab → result back to offscreen.
+chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
+  if (msg?.kind === 'dom_op_request') {
+    const { id, op } = msg
+    const tabId = op?.tabId
+    if (typeof tabId !== 'number') {
+      chrome.runtime.sendMessage({
+        kind: 'dom_op_result',
+        id,
+        result: {
+          ok: false,
+          error: { code: 'no_tab', message: 'op missing tabId', retryable: false },
+        },
+      })
+      return false
+    }
+    chrome.tabs.sendMessage(tabId, { kind: 'dom_op', id, op }, (response) => {
+      if (chrome.runtime.lastError) {
+        chrome.runtime.sendMessage({
+          kind: 'dom_op_result',
+          id,
+          result: {
+            ok: false,
+            error: {
+              code: 'tab_unreachable',
+              message: chrome.runtime.lastError.message ?? '',
+              retryable: true,
+            },
+          },
+        })
+        return
+      }
+      chrome.runtime.sendMessage({ kind: 'dom_op_result', id, result: response })
+    })
+    return true
+  }
+  if (msg?.kind === 'chrome_api_request') {
+    const { id, method, args } = msg
+    handleChromeApi(method, args).then((result) =>
+      chrome.runtime.sendMessage({ kind: 'chrome_api_result', id, result }),
+    )
+    return true
+  }
+  return false
+})
+
+async function handleChromeApi(method: string, args: any[]) {
+  try {
+    if (method === 'tabs.query') {
+      const tabs = await chrome.tabs.query(args[0] ?? {})
+      return {
+        ok: true,
+        data: {
+          tabs: tabs.map((t) => ({
+            id: t.id ?? -1,
+            url: t.url ?? '',
+            title: t.title ?? '',
+            active: t.active,
+          })),
+        },
+      }
+    }
+    if (method === 'tabs.captureVisibleTab') {
+      const dataUrl = await chrome.tabs.captureVisibleTab()
+      return { ok: true, data: { dataUrl } }
+    }
+    return {
+      ok: false,
+      error: { code: 'unknown_method', message: method, retryable: false },
+    }
+  } catch (e: any) {
+    return {
+      ok: false,
+      error: { code: 'chrome_api_error', message: e?.message ?? String(e), retryable: true },
+    }
+  }
+}
 
 console.log('[mycli-web] background SW booted')

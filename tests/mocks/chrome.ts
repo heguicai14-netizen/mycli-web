@@ -31,7 +31,16 @@ function asPort(ep: PortEndpoint): chrome.runtime.Port {
     } as any,
     postMessage: (msg: unknown) => {
       if (ep.disconnected || !ep.remote) return
-      for (const cb of ep.remote.listeners) cb(msg, asPort(ep.remote))
+      // Deliver asynchronously via microtask so listeners attached during the
+      // current sync call (e.g. by the receiving side that just got the port via
+      // onConnect) can be in place when the message arrives. This matches real
+      // Chrome's cross-context postMessage behavior more faithfully than a
+      // synchronous loop.
+      const remote = ep.remote
+      queueMicrotask(() => {
+        if (remote.disconnected) return
+        for (const cb of remote.listeners) cb(msg, asPort(remote))
+      })
     },
     disconnect: () => {
       if (ep.disconnected) return
