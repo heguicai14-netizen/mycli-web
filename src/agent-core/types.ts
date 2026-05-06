@@ -1,6 +1,4 @@
 // 中央类型定义。Plan B 抽核之后唯一的 agent 类型来源。
-// 注意：ToolExecContext 的 tabId / rpc 字段在 PR 2 后会删除——它们属于 ExtensionToolCtx，
-// 不属于 agent-core。当前为兼容旧扩展工具暂留。
 
 export type Uuid = string
 
@@ -54,24 +52,13 @@ export interface ToolCall {
   input: unknown
 }
 
-export interface ToolDefinition<I = unknown, O = unknown> {
+export interface ToolDefinition<I = unknown, O = unknown, ExtraCtx = Record<string, never>> {
   name: string
   description: string
   inputSchema: Record<string, unknown>
-  /** @deprecated PR 2 起执行位置由"工具来自哪个包"决定，此字段会删除 */
-  exec?: 'content' | 'sw' | 'offscreen'
-  execute(input: I, ctx: ToolExecContext): Promise<ToolResult<O>>
+  execute(input: I, ctx: ToolExecContext & ExtraCtx): Promise<ToolResult<O>>
 }
 
 export interface ToolExecContext {
-  conversationId: ConversationId
-  /** @deprecated PR 2 起搬到 ExtensionToolCtx */
-  tabId: number | undefined
-  /** @deprecated PR 2 起搬到 ExtensionToolCtx */
-  rpc: ToolExecRpc
-}
-
-export interface ToolExecRpc {
-  domOp(op: unknown, timeoutMs?: number): Promise<ToolResult>
-  chromeApi(method: string, args: unknown[]): Promise<ToolResult>
+  signal?: AbortSignal
 }

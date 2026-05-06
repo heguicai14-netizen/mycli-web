@@ -1,15 +1,18 @@
 import { describe, it, expect, vi } from 'vitest'
-import { readPageTool } from '@/tools/readPage'
+import { readPageTool } from '@ext-tools/tools/readPage'
+import type { ExtensionToolCtx } from '@ext-tools/ctx'
 import type { ToolExecContext } from '@core'
 
-function makeCtx(overrides: Partial<ToolExecContext> = {}): ToolExecContext {
+type ReadPageCtx = ToolExecContext & ExtensionToolCtx
+
+function makeCtx(overrides: Partial<ReadPageCtx> = {}): ReadPageCtx {
   return {
-    conversationId: 'conv1',
     tabId: 42,
     rpc: {
       domOp: vi.fn().mockResolvedValue({ ok: true, data: { text: 'hello world' } }),
       chromeApi: vi.fn(),
     },
+    conversationId: 'conv1',
     ...overrides,
   }
 }

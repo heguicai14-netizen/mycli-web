@@ -12,7 +12,7 @@ export interface CreateAgentOptions<ExtraCtx = Record<string, never>> {
    * `ToolDefinition<I, O, ExtraCtx>`（特化 ctx）——前者忽略 ExtraCtx 字段，后者读取。
    * 注入的 toolContext 必须满足"读它的工具"所需的字段。
    */
-  tools: Array<ToolDefinition<any, any>>
+  tools: Array<ToolDefinition<any, any, any>>
   toolContext: ExtraCtx
   systemPrompt?: string
   toolMaxIterations?: number

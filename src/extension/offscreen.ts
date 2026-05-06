@@ -2,11 +2,7 @@ import { ClientCmd } from './rpc/protocol'
 import { createAgent, type AgentEvent } from '@core'
 import type { ChatMessage } from '@core'
 import { fetchGetTool } from '@core/tools/fetchGet'
-import { readPageTool } from '@/tools/readPage'
-import { readSelectionTool } from '@/tools/readSelection'
-import { querySelectorTool } from '@/tools/querySelector'
-import { screenshotTool } from '@/tools/screenshot'
-import { listTabsTool } from '@/tools/listTabs'
+import { extensionTools, type ExtensionToolCtx, type ExtensionToolRpc } from '@ext-tools'
 import { loadSettings } from './storage/settings'
 import {
   createConversation,
@@ -18,7 +14,6 @@ import {
   listMessagesByConversation,
   updateMessage,
 } from './storage/messages'
-import type { ToolExecContext, ToolExecRpc } from '@core/types'
 
 console.log('[mycli-web] offscreen agent runtime booted at', new Date().toISOString())
 
@@ -151,26 +146,19 @@ async function runChat(cmd: { sessionId: string; text: string }) {
 
   // ToolExecContext fields shared by all tools (chrome backend).
   const tabId = (await guessActiveTab())?.id
-  const rpc: ToolExecRpc = {
+  const rpc: ExtensionToolRpc = {
     domOp: (op, timeoutMs = 30_000) => sendDomOp(op, timeoutMs),
     chromeApi: (method, args) => callChromeApi(method, args),
   }
-  const toolContext: Partial<ToolExecContext> = {
-    conversationId: cid,
-    tabId,
+  const toolContext: ExtensionToolCtx = {
     rpc,
+    tabId,
+    conversationId: cid,
   }
 
   const agent = createAgent({
     llm: { apiKey: settings.apiKey, baseUrl: settings.baseUrl, model: settings.model },
-    tools: [
-      fetchGetTool,
-      readPageTool,
-      readSelectionTool,
-      querySelectorTool,
-      screenshotTool,
-      listTabsTool,
-    ],
+    tools: [fetchGetTool, ...extensionTools],
     toolContext,
     toolMaxIterations: settings.toolMaxIterations,
     systemPrompt: settings.systemPromptAddendum || undefined,

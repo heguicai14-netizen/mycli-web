@@ -170,40 +170,6 @@ export const AgentEvent = z.discriminatedUnion('kind', [
 ])
 export type AgentEvent = z.infer<typeof AgentEvent>
 
-// ---------------- Offscreen ↔ Content (DOM ops) ----------------
-
-const DomReadPage = Base.extend({
-  kind: z.literal('dom/readPage'),
-  tabId: z.number().int(),
-  mode: z.enum(['text', 'markdown', 'html-simplified']),
-})
-
-const DomClick = Base.extend({
-  kind: z.literal('dom/click'),
-  tabId: z.number().int(),
-  target: z.object({ selector: z.string(), all: z.boolean().optional() }),
-})
-
-const DomType = Base.extend({
-  kind: z.literal('dom/type'),
-  tabId: z.number().int(),
-  target: z.object({ selector: z.string() }),
-  value: z.string(),
-})
-
-const DomScreenshot = Base.extend({
-  kind: z.literal('dom/screenshot'),
-  tabId: z.number().int(),
-})
-
-export const DomOp = z.discriminatedUnion('kind', [
-  DomReadPage,
-  DomClick,
-  DomType,
-  DomScreenshot,
-])
-export type DomOp = z.infer<typeof DomOp>
-
 // ---------------- Envelope ----------------
 
 export const Envelope = z.object({
@@ -213,6 +179,6 @@ export const Envelope = z.object({
     'offscreen->content',
     'content->offscreen',
   ]),
-  payload: z.union([ClientCmd, AgentEvent, DomOp]),
+  payload: z.union([ClientCmd, AgentEvent]),
 })
 export type Envelope = z.infer<typeof Envelope>

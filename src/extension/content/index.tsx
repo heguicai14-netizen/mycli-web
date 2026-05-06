@@ -1,7 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import { StrictMode } from 'react'
 import { ChatApp } from './ChatApp'
-import { installDomHandlers } from './domHandlers'
+import { installDomHandlers } from '@ext-tools/content/domHandlers'
 import { loadSettings } from '../storage/settings'
 import contentCss from '../../styles/content.css?inline'
 

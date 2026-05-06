@@ -9,7 +9,6 @@ export { AgentEvent } from './protocol'
 export type {
   ToolDefinition,
   ToolExecContext,
-  ToolExecRpc,
   ToolResult,
   ToolCall,
   ToolCallId,

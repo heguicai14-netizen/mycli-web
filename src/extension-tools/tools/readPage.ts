@@ -1,5 +1,6 @@
 import { makeError } from '@core/Tool'
 import type { ToolDefinition } from '@core'
+import type { ExtensionToolCtx } from '../ctx'
 
 interface ReadPageInput {
   mode?: 'text' | 'markdown' | 'html-simplified'
@@ -11,7 +12,7 @@ interface ReadPageOutput {
   title?: string
 }
 
-export const readPageTool: ToolDefinition<ReadPageInput, ReadPageOutput> = {
+export const readPageTool: ToolDefinition<ReadPageInput, ReadPageOutput, ExtensionToolCtx> = {
   name: 'readPage',
   description: 'Read the current page content as text, markdown, or simplified HTML.',
   inputSchema: {
@@ -24,7 +25,6 @@ export const readPageTool: ToolDefinition<ReadPageInput, ReadPageOutput> = {
       },
     },
   },
-  exec: 'content',
   async execute(input, ctx) {
     if (ctx.tabId === undefined) {
       return makeError('no_active_tab', 'no active tab to read from')

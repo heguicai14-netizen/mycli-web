@@ -29,7 +29,6 @@ export const fetchGetTool: ToolDefinition<Input, Output> = {
     },
     required: ['url'],
   },
-  exec: 'offscreen',
   async execute(input) {
     try {
       const res = await fetch(input.url, {

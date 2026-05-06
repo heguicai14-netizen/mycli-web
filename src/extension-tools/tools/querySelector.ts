@@ -1,5 +1,6 @@
 import { makeError } from '@core/Tool'
 import type { ToolDefinition } from '@core'
+import type { ExtensionToolCtx } from '../ctx'
 
 interface Input {
   selector: string
@@ -13,7 +14,7 @@ interface Output {
   }>
 }
 
-export const querySelectorTool: ToolDefinition<Input, Output> = {
+export const querySelectorTool: ToolDefinition<Input, Output, ExtensionToolCtx> = {
   name: 'querySelector',
   description: 'Find DOM elements on the active tab matching a CSS selector.',
   inputSchema: {
@@ -28,7 +29,6 @@ export const querySelectorTool: ToolDefinition<Input, Output> = {
     },
     required: ['selector'],
   },
-  exec: 'content',
   async execute(input, ctx) {
     if (ctx.tabId === undefined) return makeError('no_active_tab', 'no active tab')
     return (await ctx.rpc.domOp({

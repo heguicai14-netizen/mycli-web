@@ -51,14 +51,10 @@ export class AgentSession<ExtraCtx = Record<string, never>> {
             error: { code: 'unknown_tool', message: call.name, retryable: false },
           }
         }
-        // Transitional ctx assembly: agent-core's ToolExecContext still carries
-        // `conversationId`/`tabId`/`rpc` as deprecated fields (real consumers
-        // inject them via toolContext). PR 2 strips these from the base type and
-        // this becomes a clean spread.
+        // Build ctx from caller-provided ExtraCtx; base ToolExecContext has only optional fields.
         const ctx = {
-          conversationId: '',
           ...(this.opts.toolContext as object),
-        } as unknown as ToolExecContext
+        } as ToolExecContext & ExtraCtx
         return def.execute(call.input as any, ctx)
       },
       toolMaxIterations: this.opts.toolMaxIterations,

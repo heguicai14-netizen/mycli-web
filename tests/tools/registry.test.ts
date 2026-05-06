@@ -6,7 +6,6 @@ const noopTool: ToolDefinition = {
   name: 'noop',
   description: 'noop',
   inputSchema: { type: 'object', properties: {} },
-  exec: 'offscreen',
   async execute() {
     return { ok: true, data: 'ok' }
   },
