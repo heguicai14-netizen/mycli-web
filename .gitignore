@@ -8,6 +8,12 @@ coverage/
 .cache/
 .turbo/
 
+# tsc -b composite outputs (project-references emit) — should land in node_modules/.cache
+src/**/*.js
+src/**/*.d.ts
+src/**/*.d.ts.map
+src/**/*.tsbuildinfo
+
 *.log
 *.tmp
 *.swp
