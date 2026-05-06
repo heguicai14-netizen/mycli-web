@@ -1,8 +1,8 @@
 import type {
   OpenAICompatibleClient,
   ChatMessage,
-} from '@/agent/api/openaiCompatibleClient'
-import type { ToolCall, ToolResult } from '@shared/types'
+} from './OpenAICompatibleClient'
+import type { ToolCall, ToolResult } from './types'
 
 export type EngineEvent =
   | { kind: 'assistant_delta'; text: string }

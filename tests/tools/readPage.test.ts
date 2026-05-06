@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { readPageTool } from '@/tools/readPage'
-import type { ToolExecContext } from '@shared/types'
+import type { ToolExecContext } from '@core'
 
 function makeCtx(overrides: Partial<ToolExecContext> = {}): ToolExecContext {
   return {

@@ -1,5 +1,5 @@
-import { makeError } from '@/agent/Tool'
-import type { ToolDefinition } from '@shared/types'
+import { makeError } from '@core/Tool'
+import type { ToolDefinition } from '@core'
 
 interface ReadPageInput {
   mode?: 'text' | 'markdown' | 'html-simplified'

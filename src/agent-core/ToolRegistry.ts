@@ -1,5 +1,5 @@
-import { toOpenAiTool } from '@/agent/Tool'
-import type { ToolDefinition } from '@shared/types'
+import { toOpenAiTool } from './Tool'
+import type { ToolDefinition } from './types'
 
 export class ToolRegistry {
   private map = new Map<string, ToolDefinition>()

@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": ".",
+    "outDir": "../node_modules/.cache/tsc/tests",
+    "tsBuildInfoFile": "../node_modules/.cache/tsc/tests.tsbuildinfo",
+    "types": ["chrome", "vite/client", "vitest/globals"]
+  },
+  "references": [
+    { "path": "../src/agent-core" },
+    { "path": "../src/extension" }
+  ],
+  "include": ["**/*.ts", "**/*.tsx"]
+}

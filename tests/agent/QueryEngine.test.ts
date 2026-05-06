@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
-import { QueryEngine } from '@/agent/query/QueryEngine'
+import { QueryEngine } from '@core/QueryEngine'
 import type {
   OpenAICompatibleClient,
   StreamEvent,
-} from '@/agent/api/openaiCompatibleClient'
+} from '@core/OpenAICompatibleClient'
 
 function fakeClient(scripts: StreamEvent[][]): OpenAICompatibleClient {
   let turn = 0

@@ -1,5 +1,5 @@
 import { openDb, type ConversationRow } from './db'
-import type { ConversationId } from '@shared/types'
+import type { ConversationId } from '@core'
 
 function newId(): ConversationId {
   return crypto.randomUUID()

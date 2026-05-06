@@ -8,8 +8,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
-      '@shared': path.resolve(__dirname, 'src/shared'),
       '@ext': path.resolve(__dirname, 'src/extension'),
+      '@core': path.resolve(__dirname, 'src/agent-core'),
     },
   },
   plugins: [

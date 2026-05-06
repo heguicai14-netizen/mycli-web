@@ -35,7 +35,7 @@ describe('RPC hub (content ↔ SW)', () => {
     } as any)
     const ack = await bad
     expect(ack.ok).toBe(false)
-    expect(ack.error?.code).toBe('schema_invalid')
+    expect((ack as { ok: false; error: { code: string; message: string } }).error.code).toBe('schema_invalid')
     client.disconnect()
   })
 })

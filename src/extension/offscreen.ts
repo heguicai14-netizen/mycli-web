@@ -1,13 +1,12 @@
 import { ClientCmd } from './rpc/protocol'
-import { OpenAICompatibleClient, type ChatMessage } from '@/agent/api/openaiCompatibleClient'
-import { QueryEngine } from '@/agent/query/QueryEngine'
-import { ToolRegistry } from '@/tools/registry'
+import { createAgent, type AgentEvent } from '@core'
+import type { ChatMessage } from '@core'
+import { fetchGetTool } from '@core/tools/fetchGet'
 import { readPageTool } from '@/tools/readPage'
 import { readSelectionTool } from '@/tools/readSelection'
 import { querySelectorTool } from '@/tools/querySelector'
 import { screenshotTool } from '@/tools/screenshot'
 import { listTabsTool } from '@/tools/listTabs'
-import { fetchGetTool } from '@/tools/fetchGet'
 import { loadSettings } from './storage/settings'
 import {
   createConversation,
@@ -19,20 +18,12 @@ import {
   listMessagesByConversation,
   updateMessage,
 } from './storage/messages'
-import type { ToolCall, ToolExecContext } from '@shared/types'
+import type { ToolExecContext, ToolExecRpc } from '@core/types'
 
 console.log('[mycli-web] offscreen agent runtime booted at', new Date().toISOString())
 
-const registry = new ToolRegistry()
-registry.register(readPageTool)
-registry.register(readSelectionTool)
-registry.register(querySelectorTool)
-registry.register(screenshotTool)
-registry.register(listTabsTool)
-registry.register(fetchGetTool)
-
 let swPort: chrome.runtime.Port | null = null
-const activeAborts = new Map<string, AbortController>()
+const activeAborts = new Map<string, { abort: () => void }>()
 
 // SW will connect to us via chrome.runtime.connect({ name: 'sw-to-offscreen' }).
 chrome.runtime.onConnect.addListener((port) => {
@@ -104,8 +95,18 @@ async function pushSnapshot(sessionId: string, conversationId?: string) {
 }
 
 async function runChat(cmd: { sessionId: string; text: string }) {
+  console.log('[mycli-web/offscreen] runChat start, text:', cmd.text)
   const settings = await loadSettings()
+  console.log(
+    '[mycli-web/offscreen] settings loaded; apiKey set:',
+    !!settings.apiKey,
+    'baseUrl:',
+    settings.baseUrl,
+    'model:',
+    settings.model,
+  )
   if (!settings.apiKey) {
+    console.warn('[mycli-web/offscreen] no apiKey — emitting fatalError')
     emit({
       id: crypto.randomUUID(),
       sessionId: cmd.sessionId,
@@ -136,53 +137,47 @@ async function runChat(cmd: { sessionId: string; text: string }) {
     },
   })
 
-  const history = await listMessagesByConversation(cid)
-  const llmHistory: ChatMessage[] = history
+  // Load prior conversation history (everything except the just-appended user
+  // message) so the LLM retains context from previous turns.
+  const allHistory = await listMessagesByConversation(cid)
+  const priorHistory: ChatMessage[] = allHistory
     .filter((m) => !m.compacted)
+    .filter((m) => m.id !== userMsg.id)
     .map((m) => ({
       role:
-        m.role === 'system-synth'
-          ? 'system'
-          : (m.role as ChatMessage['role']),
+        m.role === 'system-synth' ? 'system' : (m.role as ChatMessage['role']),
       content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
     }))
 
-  const client = new OpenAICompatibleClient({
-    apiKey: settings.apiKey,
-    baseUrl: settings.baseUrl,
-    model: settings.model,
-  })
-
-  const abort = new AbortController()
-  activeAborts.set(cmd.sessionId, abort)
-
+  // ToolExecContext fields shared by all tools (chrome backend).
   const tabId = (await guessActiveTab())?.id
-  const ctx: ToolExecContext = {
+  const rpc: ToolExecRpc = {
+    domOp: (op, timeoutMs = 30_000) => sendDomOp(op, timeoutMs),
+    chromeApi: (method, args) => callChromeApi(method, args),
+  }
+  const toolContext: Partial<ToolExecContext> = {
     conversationId: cid,
     tabId,
-    rpc: {
-      domOp: (op, timeoutMs = 30_000) => sendDomOp(op, timeoutMs),
-      chromeApi: (method, args) => callChromeApi(method, args),
-    },
+    rpc,
   }
 
-  const engine = new QueryEngine({
-    client,
-    tools: registry.toOpenAi(),
-    executeTool: async (call: ToolCall) => {
-      const def = registry.get(call.name)
-      if (!def) {
-        return {
-          ok: false,
-          error: { code: 'unknown_tool', message: call.name, retryable: false },
-        }
-      }
-      return def.execute(call.input as any, ctx)
-    },
+  const agent = createAgent({
+    llm: { apiKey: settings.apiKey, baseUrl: settings.baseUrl, model: settings.model },
+    tools: [
+      fetchGetTool,
+      readPageTool,
+      readSelectionTool,
+      querySelectorTool,
+      screenshotTool,
+      listTabsTool,
+    ],
+    toolContext,
     toolMaxIterations: settings.toolMaxIterations,
     systemPrompt: settings.systemPromptAddendum || undefined,
-    signal: abort.signal,
   })
+
+  // Track this session's agent so chat/cancel can abort it.
+  activeAborts.set(cmd.sessionId, { abort: () => agent.cancel() })
 
   const assistantMsg = await appendMessage({
     conversationId: cid,
@@ -191,38 +186,39 @@ async function runChat(cmd: { sessionId: string; text: string }) {
     pending: true,
   })
 
-  let assistantBuf = ''
   try {
-    for await (const ev of engine.run(llmHistory)) {
-      if (ev.kind === 'assistant_delta') {
-        assistantBuf += ev.text
+    for await (const ev of agent.send(cmd.text, { history: priorHistory }) as AsyncIterable<AgentEvent>) {
+      if (ev.kind === 'message/streamChunk') {
         emit({
           id: crypto.randomUUID(),
           sessionId: cmd.sessionId,
           ts: Date.now(),
           kind: 'message/streamChunk',
           messageId: assistantMsg.id,
-          delta: ev.text,
+          delta: ev.delta,
         })
-      } else if (ev.kind === 'tool_executing') {
+      } else if (ev.kind === 'tool/start') {
         emit({
           id: crypto.randomUUID(),
           sessionId: cmd.sessionId,
           ts: Date.now(),
           kind: 'tool/start',
-          toolCall: { id: ev.call.id, tool: ev.call.name, args: ev.call.input },
+          toolCall: ev.toolCall,
         })
-      } else if (ev.kind === 'tool_result') {
+      } else if (ev.kind === 'tool/end') {
         emit({
           id: crypto.randomUUID(),
           sessionId: cmd.sessionId,
           ts: Date.now(),
           kind: 'tool/end',
-          toolCallId: ev.callId,
-          result: { ok: !ev.isError, content: ev.content },
+          toolCallId: ev.toolCallId,
+          result: ev.result,
         })
       } else if (ev.kind === 'done') {
-        await updateMessage(assistantMsg.id, { content: assistantBuf, pending: false })
+        await updateMessage(assistantMsg.id, {
+          content: ev.assistantText,
+          pending: false,
+        })
         emit({
           id: crypto.randomUUID(),
           sessionId: cmd.sessionId,
@@ -231,7 +227,7 @@ async function runChat(cmd: { sessionId: string; text: string }) {
           message: {
             id: assistantMsg.id,
             role: 'assistant',
-            content: assistantBuf,
+            content: ev.assistantText,
             createdAt: assistantMsg.createdAt,
           },
         })

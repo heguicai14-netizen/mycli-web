@@ -1,4 +1,6 @@
-// 跨进程广泛复用的基础类型。Plan B 会往这里补 AssistantMessage、ToolCall 等 agent 专属类型。
+// 中央类型定义。Plan B 抽核之后唯一的 agent 类型来源。
+// 注意：ToolExecContext 的 tabId / rpc 字段在 PR 2 后会删除——它们属于 ExtensionToolCtx，
+// 不属于 agent-core。当前为兼容旧扩展工具暂留。
 
 export type Uuid = string
 
@@ -6,7 +8,7 @@ export type ConversationId = Uuid
 export type MessageId = Uuid
 export type ToolCallId = Uuid
 export type ApprovalId = Uuid
-export type SkillId = string // skill name@version 组合，非 uuid
+export type SkillId = string
 
 export type Role = 'user' | 'assistant' | 'tool' | 'system-synth'
 
@@ -14,9 +16,6 @@ export type ToolResult<T = unknown> =
   | { ok: true; data: T }
   | { ok: false; error: { code: string; message: string; retryable: boolean; details?: unknown } }
 
-// ---------------- Agent message types ----------------
-
-/** A piece of message content; MVP only uses text/tool_use/tool_result. */
 export type ContentPart =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: ToolCallId; name: string; input: unknown }
@@ -34,7 +33,6 @@ export interface AssistantMessage {
   role: 'assistant'
   content: ContentPart[]
   createdAt: number
-  /** True while streaming; false once committed */
   pending?: boolean
   stopReason?: 'end_turn' | 'tool_use' | 'max_iterations' | 'cancel' | 'error'
 }
@@ -59,24 +57,21 @@ export interface ToolCall {
 export interface ToolDefinition<I = unknown, O = unknown> {
   name: string
   description: string
-  /** JSON Schema describing the tool's input */
   inputSchema: Record<string, unknown>
-  /** Where the tool's body actually runs */
-  exec: 'content' | 'sw' | 'offscreen'
+  /** @deprecated PR 2 起执行位置由"工具来自哪个包"决定，此字段会删除 */
+  exec?: 'content' | 'sw' | 'offscreen'
   execute(input: I, ctx: ToolExecContext): Promise<ToolResult<O>>
 }
 
 export interface ToolExecContext {
   conversationId: ConversationId
-  /** Active tab id (the tab the user invoked agent on) */
+  /** @deprecated PR 2 起搬到 ExtensionToolCtx */
   tabId: number | undefined
-  /** RPC for tools to call out to content script / chrome.* via SW */
+  /** @deprecated PR 2 起搬到 ExtensionToolCtx */
   rpc: ToolExecRpc
 }
 
 export interface ToolExecRpc {
-  /** Send a DomOp to the target tab's content script and await the typed result */
   domOp(op: unknown, timeoutMs?: number): Promise<ToolResult>
-  /** Invoke a chrome.* API via SW */
   chromeApi(method: string, args: unknown[]): Promise<ToolResult>
 }

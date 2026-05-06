@@ -1,5 +1,5 @@
-import { makeOk, makeError } from '@/agent/Tool'
-import type { ToolDefinition } from '@shared/types'
+import { makeOk, makeError } from '../Tool'
+import type { ToolDefinition } from '../types'
 
 interface Input {
   url: string

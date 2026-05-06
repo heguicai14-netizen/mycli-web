@@ -1,4 +1,4 @@
-import type { ToolDefinition } from '@shared/types'
+import type { ToolDefinition } from '@core'
 
 interface TabSummary {
   id: number

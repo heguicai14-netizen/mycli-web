@@ -1,6 +1,6 @@
-import type { ToolDefinition, ToolResult } from '@shared/types'
+import type { ToolDefinition, ToolResult } from './types'
 
-export type { ToolDefinition, ToolResult } from '@shared/types'
+export type { ToolDefinition, ToolResult } from './types'
 
 /** Convert a ToolDefinition to OpenAI tools[] entry */
 export function toOpenAiTool(def: ToolDefinition): {

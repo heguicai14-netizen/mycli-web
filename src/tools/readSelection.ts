@@ -1,5 +1,5 @@
-import { makeError } from '@/agent/Tool'
-import type { ToolDefinition } from '@shared/types'
+import { makeError } from '@core/Tool'
+import type { ToolDefinition } from '@core'
 
 export const readSelectionTool: ToolDefinition<Record<string, never>, { text: string }> = {
   name: 'readSelection',

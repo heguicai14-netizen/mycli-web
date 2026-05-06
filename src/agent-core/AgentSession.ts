@@ -1,0 +1,101 @@
+import { QueryEngine } from './QueryEngine'
+import type { OpenAICompatibleClient, ChatMessage } from './OpenAICompatibleClient'
+import type { ToolExecContext, ToolCall } from './types'
+import type { AgentEvent } from './protocol'
+import { ToolRegistry } from './ToolRegistry'
+
+export interface AgentSessionOptions<ExtraCtx = Record<string, never>> {
+  llmClient: OpenAICompatibleClient
+  registry: ToolRegistry
+  toolContext: ExtraCtx
+  systemPrompt?: string
+  toolMaxIterations?: number
+}
+
+export class AgentSession<ExtraCtx = Record<string, never>> {
+  private abort = new AbortController()
+  private history: ChatMessage[] = []
+
+  constructor(private opts: AgentSessionOptions<ExtraCtx>) {}
+
+  cancel(): void {
+    this.abort.abort()
+  }
+
+  async *send(
+    text: string,
+    opts?: { history?: ChatMessage[] },
+  ): AsyncIterable<AgentEvent> {
+    // Reset abort controller so a session that was previously cancelled can
+    // still be reused (defensive — current consumer creates a new session per
+    // chat turn, but the API shouldn't trap callers).
+    if (this.abort.signal.aborted) {
+      this.abort = new AbortController()
+    }
+
+    // Seed prior history on first send. Caller provides what was persisted
+    // before this turn; we append the current user text on top.
+    if (opts?.history && this.history.length === 0) {
+      this.history.push(...opts.history)
+    }
+    this.history.push({ role: 'user', content: text })
+
+    const engine = new QueryEngine({
+      client: this.opts.llmClient,
+      tools: this.opts.registry.toOpenAi(),
+      executeTool: async (call: ToolCall) => {
+        const def = this.opts.registry.get(call.name)
+        if (!def) {
+          return {
+            ok: false,
+            error: { code: 'unknown_tool', message: call.name, retryable: false },
+          }
+        }
+        // Transitional ctx assembly: agent-core's ToolExecContext still carries
+        // `conversationId`/`tabId`/`rpc` as deprecated fields (real consumers
+        // inject them via toolContext). PR 2 strips these from the base type and
+        // this becomes a clean spread.
+        const ctx = {
+          conversationId: '',
+          ...(this.opts.toolContext as object),
+        } as unknown as ToolExecContext
+        return def.execute(call.input as any, ctx)
+      },
+      toolMaxIterations: this.opts.toolMaxIterations,
+      systemPrompt: this.opts.systemPrompt,
+      signal: this.abort.signal,
+    })
+
+    let assistantText = ''
+
+    for await (const ev of engine.run(this.history)) {
+      if (ev.kind === 'assistant_delta') {
+        assistantText += ev.text
+        yield { kind: 'message/streamChunk', delta: ev.text }
+      } else if (ev.kind === 'tool_executing') {
+        yield {
+          kind: 'tool/start',
+          toolCall: { id: ev.call.id, tool: ev.call.name, args: ev.call.input },
+        }
+      } else if (ev.kind === 'tool_result') {
+        yield {
+          kind: 'tool/end',
+          toolCallId: ev.callId,
+          result: { ok: !ev.isError, content: ev.content },
+        }
+      } else if (ev.kind === 'done') {
+        const sr = ev.stopReason
+        const stopReason: 'end_turn' | 'tool_use' | 'max_iterations' | 'cancel' | 'error' =
+          sr === 'end_turn' || sr === 'max_iterations' || sr === 'cancel' || sr === 'error'
+            ? sr
+            : 'end_turn'
+        yield {
+          kind: 'done',
+          stopReason,
+          assistantText,
+          ...(ev.error ? { error: ev.error } : {}),
+        }
+      }
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { fetchGetTool } from '@/tools/fetchGet'
+import { fetchGetTool } from '@core/tools/fetchGet'
 
 const ctx = {
   conversationId: 'c',
