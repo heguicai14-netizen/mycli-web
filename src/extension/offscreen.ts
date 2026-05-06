@@ -90,6 +90,7 @@ async function pushSnapshot(sessionId: string, conversationId?: string) {
         role: m.role,
         content: m.content,
         createdAt: m.createdAt,
+        pending: (m as { pending?: boolean }).pending,
       })),
     },
   })
@@ -180,6 +181,24 @@ async function runChat(cmd: { sessionId: string; text: string }) {
     pending: true,
   })
 
+  // Emit a wire 'message/appended' for the empty pending assistant placeholder so the UI
+  // can anchor tool/start cards to a known message id even when the model decides to call
+  // a tool before producing any assistant text. pending: true tells the UI this is a
+  // placeholder and busy state should be preserved until the final 'done' append.
+  emit({
+    id: crypto.randomUUID(),
+    sessionId: cmd.sessionId,
+    ts: Date.now(),
+    kind: 'message/appended',
+    message: {
+      id: assistantMsg.id,
+      role: 'assistant',
+      content: '',
+      createdAt: assistantMsg.createdAt,
+      pending: true,
+    },
+  })
+
   try {
     for await (const ev of agent.send(cmd.text, { history: priorHistory }) as AsyncIterable<AgentEvent>) {
       if (ev.kind === 'message/streamChunk') {
@@ -223,6 +242,7 @@ async function runChat(cmd: { sessionId: string; text: string }) {
             role: 'assistant',
             content: ev.assistantText,
             createdAt: assistantMsg.createdAt,
+            pending: false,
           },
         })
       }

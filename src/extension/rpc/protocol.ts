@@ -76,6 +76,12 @@ const MessageLike = z.object({
   role: z.enum(['user', 'assistant', 'tool', 'system-synth']),
   content: z.unknown(),
   createdAt: z.number(),
+  /**
+   * True while the assistant message is still being filled (placeholder before
+   * stream starts, or mid-stream). False/absent on terminal messages. Used by
+   * the UI to decide whether to keep showing busy state.
+   */
+  pending: z.boolean().optional(),
 })
 
 const MessageAppended = Base.extend({
