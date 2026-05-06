@@ -45,6 +45,13 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
   if (tab?.id) await activateOnTab(tab.id)
 })
 
+// chrome.storage.session defaults to TRUSTED_CONTEXTS only (= no content scripts).
+// Content scripts need to read/write transient UI state (panelOpen, etc.), so widen
+// the access level here at SW startup. Idempotent — safe to call on every boot.
+chrome.storage.session
+  .setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' })
+  .catch((e) => console.warn('[mycli-web] failed to widen session storage access:', e))
+
 installHub({ mode: 'offscreen-forward' })
 
 // DOM op routing: offscreen → SW → target tab → result back to offscreen.

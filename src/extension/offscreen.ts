@@ -23,9 +23,11 @@ const activeAborts = new Map<string, { abort: () => void }>()
 // SW will connect to us via chrome.runtime.connect({ name: 'sw-to-offscreen' }).
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== 'sw-to-offscreen') return
+  console.log('[mycli-web/offscreen] SW connected')
   swPort = port
   port.onMessage.addListener((raw) => handleClientCmd(raw))
   port.onDisconnect.addListener(() => {
+    console.warn('[mycli-web/offscreen] SW disconnected')
     swPort = null
     for (const [, ac] of activeAborts) ac.abort()
     activeAborts.clear()
@@ -38,8 +40,12 @@ function emit(ev: any) {
 
 async function handleClientCmd(raw: unknown) {
   const parsed = ClientCmd.safeParse(raw)
-  if (!parsed.success) return
+  if (!parsed.success) {
+    console.warn('[mycli-web/offscreen] ClientCmd schema_invalid:', parsed.error.message, 'raw kind:', (raw as any)?.kind)
+    return
+  }
   const cmd = parsed.data
+  console.log('[mycli-web/offscreen] cmd received:', cmd.kind, 'session', cmd.sessionId)
   switch (cmd.kind) {
     case 'chat/send':
       void runChat(cmd)

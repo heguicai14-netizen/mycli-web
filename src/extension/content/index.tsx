@@ -6,11 +6,13 @@ import { loadSettings } from '../storage/settings'
 import contentCss from '../../styles/content.css?inline'
 
 async function mount() {
+  console.log('[mycli-web] content script mount start on', location.href)
   // Always install DOM handlers — agent should be able to drive this tab even if
   // the user has hidden the FAB via settings.
   installDomHandlers()
 
   const settings = await loadSettings()
+  console.log('[mycli-web] settings loaded; fab enabled:', settings.fab.enabled, 'apiKey set:', !!settings.apiKey)
   if (!settings.fab.enabled) return
 
   // Build Shadow DOM host to isolate from page styles.

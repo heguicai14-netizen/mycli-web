@@ -19,14 +19,31 @@ export function ChatApp() {
   useEffect(() => {
     let cleanup: (() => void) | undefined
     void (async () => {
-      const settings = await loadSettings()
-      setPosition(settings.fab.position)
-      const ui = await getTransientUi()
-      setOpen(ui.panelOpen)
-
+      // Connect the RPC client FIRST. Anything else can fail without nuking
+      // the agent connection.
+      console.log('[mycli-web] ChatApp creating RpcClient')
       const client = new RpcClient({ portName: 'session' })
       clientRef.current = client
-      await client.connect()
+      try {
+        await client.connect()
+        console.log('[mycli-web] ChatApp client connected, sessionId:', client.sessionId)
+      } catch (e) {
+        console.error('[mycli-web] RpcClient connect failed:', e)
+        return
+      }
+
+      try {
+        const settings = await loadSettings()
+        setPosition(settings.fab.position)
+      } catch (e) {
+        console.warn('[mycli-web] loadSettings failed (non-fatal):', e)
+      }
+      try {
+        const ui = await getTransientUi()
+        setOpen(ui.panelOpen)
+      } catch (e) {
+        console.warn('[mycli-web] getTransientUi failed (non-fatal):', e)
+      }
 
       client.on('message/appended', (ev: any) => {
         setMessages((prev) => {
@@ -116,10 +133,20 @@ export function ChatApp() {
   }
 
   function send(text: string) {
-    if (!clientRef.current) return
+    console.log('[mycli-web] ChatApp.send called; client connected:', !!clientRef.current, 'text:', text)
+    if (!clientRef.current) {
+      setErrorBanner('RpcClient not connected — check SW/offscreen.')
+      return
+    }
     setBusy(true)
     setErrorBanner(undefined)
-    clientRef.current.send({ kind: 'chat/send', text })
+    clientRef.current.send({ kind: 'chat/send', text }).then((ack) => {
+      console.log('[mycli-web] chat/send ack:', ack)
+      if (!ack.ok) {
+        setBusy(false)
+        setErrorBanner(`ack failed: ${ack.error.code}: ${ack.error.message}`)
+      }
+    })
   }
 
   function newConversation() {

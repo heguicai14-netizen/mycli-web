@@ -25,25 +25,37 @@ export function installHub(options: HubOptions = { mode: 'echo' }) {
     if (offscreenPort) return
     if (options.mode !== 'offscreen-forward') return
     try {
+      console.log('[mycli-web/hub] connecting to offscreen port:', offscreenPortName)
       offscreenPort = chrome.runtime.connect({ name: offscreenPortName })
-      offscreenPort.onMessage.addListener((raw) => routeAgentEventToClient(raw))
+      offscreenPort.onMessage.addListener((raw) => {
+        console.log('[mycli-web/hub] event from offscreen:', (raw as any)?.kind)
+        routeAgentEventToClient(raw)
+      })
       offscreenPort.onDisconnect.addListener(() => {
+        console.warn('[mycli-web/hub] offscreen port disconnected')
         offscreenPort = null
       })
       while (offscreenPendingMessages.length) {
         offscreenPort.postMessage(offscreenPendingMessages.shift())
       }
-    } catch {
-      // No offscreen runtime listening yet — retry on next message
+    } catch (e) {
+      console.error('[mycli-web/hub] ensureOffscreenPort failed:', e)
     }
   }
 
   function routeAgentEventToClient(raw: unknown) {
     const parsed = AgentEvent.safeParse(raw)
-    if (!parsed.success) return
+    if (!parsed.success) {
+      console.warn('[mycli-web/hub] AgentEvent schema_invalid:', parsed.error.message, 'raw kind:', (raw as any)?.kind)
+      return
+    }
     const ev = parsed.data
     const session = sessionsById.get(ev.sessionId)
-    if (session) session.port.postMessage(ev)
+    if (session) {
+      session.port.postMessage(ev)
+    } else {
+      console.warn('[mycli-web/hub] no client session for sessionId', ev.sessionId, 'event', ev.kind)
+    }
   }
 
   function forwardClientCmdToOffscreen(cmd: unknown) {
@@ -57,12 +69,14 @@ export function installHub(options: HubOptions = { mode: 'echo' }) {
 
   chrome.runtime.onConnect.addListener((port) => {
     if (port.name !== 'session') return
+    console.log('[mycli-web/hub] new session port from tab:', port.sender?.tab?.id, port.sender?.url)
     const session: Session = { port, sessionId: '' }
     sessionsByPort.set(port, session)
 
     port.onMessage.addListener((raw) => {
       const parsed = ClientCmd.safeParse(raw)
       if (!parsed.success) {
+        console.warn('[mycli-web/hub] ClientCmd schema_invalid:', parsed.error.message, 'raw:', raw)
         port.postMessage(ackError((raw as any)?.id, 'schema_invalid', parsed.error.message))
         return
       }
@@ -71,11 +85,10 @@ export function installHub(options: HubOptions = { mode: 'echo' }) {
         session.sessionId = cmd.sessionId
         sessionsById.set(cmd.sessionId, session)
       }
+      console.log('[mycli-web/hub] cmd', cmd.kind, 'session', cmd.sessionId)
       port.postMessage(ack(cmd.id, cmd.sessionId))
 
       if (options.mode === 'echo' && cmd.kind === 'ping') {
-        // Defer pong by a microtask so test handlers attached after `await send()`
-        // get a chance to be registered before the event arrives.
         queueMicrotask(() => {
           const pong: AgentEvent = {
             id: crypto.randomUUID(),
