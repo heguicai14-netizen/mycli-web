@@ -42,7 +42,7 @@ export function createReadSkillFileTool({
       }
       return makeOk({ content })
     },
-  } as ToolDefinition<ReadSkillFileInput, ReadSkillFileOutput, any>
+  } as unknown as ToolDefinition<ReadSkillFileInput, ReadSkillFileOutput, any>
 
   Object.defineProperty(def, 'description', {
     enumerable: true,

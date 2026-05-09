@@ -52,7 +52,7 @@ export function createUseSkillTool({
       }
       return makeOk({ content })
     },
-  } as ToolDefinition<UseSkillInput, UseSkillOutput, any>
+  } as unknown as ToolDefinition<UseSkillInput, UseSkillOutput, any>
 
   Object.defineProperty(def, 'description', {
     enumerable: true,
