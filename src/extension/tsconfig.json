@@ -9,7 +9,8 @@
   },
   "references": [
     { "path": "../agent-core" },
-    { "path": "../extension-tools" }
+    { "path": "../extension-tools" },
+    { "path": "../extension-skills" }
   ],
   "include": ["**/*.ts", "**/*.tsx"]
 }
