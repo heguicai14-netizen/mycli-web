@@ -18,7 +18,9 @@
       "@core": ["./src/agent-core/index.ts"],
       "@core/*": ["./src/agent-core/*"],
       "@ext-tools": ["./src/extension-tools/index.ts"],
-      "@ext-tools/*": ["./src/extension-tools/*"]
+      "@ext-tools/*": ["./src/extension-tools/*"],
+      "@ext-skills": ["./src/extension-skills/index.ts"],
+      "@ext-skills/*": ["./src/extension-skills/*"]
     }
   }
 }
