@@ -14,6 +14,7 @@ import {
   getConversation,
   listConversations,
   listMessagesByConversation,
+  type ToolContextBuilder,
 } from 'agent-kernel'
 import { extensionTools, type ExtensionToolCtx, type ExtensionToolRpc } from '@ext-tools'
 import { useSkillTool, readSkillFileTool } from '@ext-skills'
@@ -139,20 +140,25 @@ async function pushSnapshot(sessionId: string, conversationId?: string) {
   })
 }
 
-async function buildToolContext(cid: string | undefined): Promise<ExtensionToolCtx> {
-  const tabId = (await guessActiveTab())?.id
-  const rpc: ExtensionToolRpc = {
-    domOp: (op, timeoutMs = 30_000) => sendDomOp(op, timeoutMs),
-    chromeApi: (method, args) => callChromeApi(method, args),
-  }
-  return { rpc, tabId, conversationId: cid }
-}
+// ExtensionToolCtx doesn't carry an index signature so the generic constraint
+// `Record<string, unknown>` rejects it directly; cast through unknown — the
+// agent loop passes the ctx verbatim to tools that already expect this shape.
+const mycliToolContext = {
+  async build(cid: string | undefined): Promise<ExtensionToolCtx> {
+    const tabId = (await guessActiveTab())?.id
+    const rpc: ExtensionToolRpc = {
+      domOp: (op, timeoutMs = 30_000) => sendDomOp(op, timeoutMs),
+      chromeApi: (method, args) => callChromeApi(method, args),
+    }
+    return { rpc, tabId, conversationId: cid }
+  },
+} as unknown as ToolContextBuilder
 
 const agentService = createAgentService({
   settings: mycliSettingsAdapter,
   emit,
   messageStore: createIdbMessageStore({ defaultConversationTitle: 'New chat' }),
-  buildToolContext,
+  toolContext: mycliToolContext,
   // Kernel default is just [fetchGetTool]; extend with mycli-web's
   // extension/skill tool sets explicitly.
   tools: [fetchGetTool, ...extensionTools, useSkillTool, readSkillFileTool],

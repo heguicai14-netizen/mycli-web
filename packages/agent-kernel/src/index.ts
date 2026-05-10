@@ -73,6 +73,7 @@ export type {
   MessageRecord,
   AppendMessageInput,
   AppendedMessage,
+  ToolContextBuilder,
 } from './adapters'
 export { createIdbMessageStore } from './browser/storage/createIdbMessageStore'
 

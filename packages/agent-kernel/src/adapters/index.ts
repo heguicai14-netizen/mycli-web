@@ -5,3 +5,4 @@ export type {
   AppendMessageInput,
   AppendedMessage,
 } from './MessageStoreAdapter'
+export type { ToolContextBuilder } from './ToolContextBuilder'

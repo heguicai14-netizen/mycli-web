@@ -77,11 +77,13 @@ function makeDeps(opts: {
       events.push(ev)
     },
     messageStore,
-    buildToolContext: vi.fn(async () => ({
-      rpc: { domOp: vi.fn(), chromeApi: vi.fn() },
-      tabId: 99,
-      conversationId: 'conv-1',
-    })),
+    toolContext: {
+      build: vi.fn(async () => ({
+        rpc: { domOp: vi.fn(), chromeApi: vi.fn() },
+        tabId: 99,
+        conversationId: 'conv-1',
+      })),
+    },
     tools: opts.tools,
     createAgent: vi.fn((agentOpts: any) => {
       if (opts.capturedAgentOpts) opts.capturedAgentOpts.current = agentOpts
@@ -241,11 +243,13 @@ describe('agentService.runTurn', () => {
         update: vi.fn(),
         activeConversationId: vi.fn(async () => 'conv-1'),
       },
-      buildToolContext: vi.fn(async () => ({
-        rpc: { domOp: vi.fn(), chromeApi: vi.fn() },
-        tabId: undefined,
-        conversationId: 'conv-1',
-      })),
+      toolContext: {
+        build: vi.fn(async () => ({
+          rpc: { domOp: vi.fn(), chromeApi: vi.fn() },
+          tabId: undefined,
+          conversationId: 'conv-1',
+        })),
+      },
       createAgent: () => session,
     }
 
@@ -276,11 +280,13 @@ describe('agentService.runTurn', () => {
         update: async () => {},
         activeConversationId: async () => 'conv-1',
       },
-      buildToolContext: async () => ({
-        rpc: { domOp: vi.fn(), chromeApi: vi.fn() },
-        tabId: undefined,
-        conversationId: 'conv-1',
-      }),
+      toolContext: {
+        build: async () => ({
+          rpc: { domOp: vi.fn(), chromeApi: vi.fn() },
+          tabId: undefined,
+          conversationId: 'conv-1',
+        }),
+      },
       createAgent: () => fake.session,
     }
     let cancelFn: (() => void) | undefined
@@ -316,11 +322,13 @@ describe('agentService.runTurn', () => {
         update: async () => {},
         activeConversationId: async () => 'conv-1',
       },
-      buildToolContext: async () => ({
-        rpc: { domOp: vi.fn(), chromeApi: vi.fn() },
-        tabId: undefined,
-        conversationId: 'conv-1',
-      }),
+      toolContext: {
+        build: async () => ({
+          rpc: { domOp: vi.fn(), chromeApi: vi.fn() },
+          tabId: undefined,
+          conversationId: 'conv-1',
+        }),
+      },
       createAgent: () => session,
     }
     const svc = createAgentService(deps)

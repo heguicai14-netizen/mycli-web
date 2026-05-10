@@ -17,6 +17,7 @@ import type { ToolDefinition } from '../core/types'
 import { fetchGetTool } from '../core/tools/fetchGet'
 import type { SettingsAdapter } from '../adapters/SettingsAdapter'
 import type { MessageStoreAdapter } from '../adapters/MessageStoreAdapter'
+import type { ToolContextBuilder } from '../adapters/ToolContextBuilder'
 
 export type { Settings } from '../adapters/SettingsAdapter'
 
@@ -44,7 +45,7 @@ export interface AgentServiceDeps {
   /** Build the per-turn ToolExecContext (tabId, rpc, etc). cid is undefined
    *  for ephemeral turns. The returned context is passed verbatim as the
    *  agent's ExtraCtx — kernel doesn't care about its shape. */
-  buildToolContext: (cid: string | undefined) => Promise<unknown>
+  toolContext: ToolContextBuilder
   /** Default tool list, before per-turn allowlist filter. */
   tools?: ToolDefinition<any, any, any>[]
   /** Override createAgent (tests use this to inject a fake LLM client). */
@@ -145,7 +146,7 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
           }))
       }
 
-      const toolContext = await deps.buildToolContext(cid ?? undefined)
+      const toolContext = await deps.toolContext.build(cid ?? undefined)
       const filteredTools = cmd.tools
         ? allTools.filter((t) => cmd.tools!.includes(t.name))
         : allTools
