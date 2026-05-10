@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": false,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@ext/*": ["./src/extension/*"],
+      "@core": ["./src/agent-core/index.ts"],
+      "@core/*": ["./src/agent-core/*"],
+      "@ext-tools": ["./src/extension-tools/index.ts"],
+      "@ext-tools/*": ["./src/extension-tools/*"],
+      "@ext-skills": ["./src/extension-skills/index.ts"],
+      "@ext-skills/*": ["./src/extension-skills/*"]
+    }
+  }
+}

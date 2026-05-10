@@ -1,0 +1,10 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./src/agent-core" },
+    { "path": "./src/extension-tools" },
+    { "path": "./src/extension-skills" },
+    { "path": "./src/extension" },
+    { "path": "./tests" }
+  ]
+}

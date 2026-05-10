@@ -13,6 +13,11 @@ src/**/*.js
 src/**/*.d.ts
 src/**/*.d.ts.map
 src/**/*.tsbuildinfo
+packages/*/src/**/*.js
+packages/*/src/**/*.d.ts
+packages/*/src/**/*.d.ts.map
+packages/*/src/**/*.tsbuildinfo
+**/*.tsbuildinfo
 
 *.log
 *.tmp
