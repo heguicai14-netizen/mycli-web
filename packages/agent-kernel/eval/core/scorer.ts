@@ -70,6 +70,11 @@ export function composite(c: number, t: number, e: number): number {
   return clamp01(c * W_COMPLETION + t * W_TRACE + e * W_EFFICIENCY)
 }
 
-export function passed(completion: number, comp: number, threshold: number): boolean {
-  return comp >= threshold && completion >= 0.5
+/**
+ * A task passes when its composite score clears the level threshold AND its
+ * completion score is at least 0.5 (the hard cutoff per spec §3.1 — even a
+ * great trace + perfect efficiency cannot make up for a wrong answer).
+ */
+export function passed(completionScore: number, compositeScore: number, threshold: number): boolean {
+  return compositeScore >= threshold && completionScore >= 0.5
 }
