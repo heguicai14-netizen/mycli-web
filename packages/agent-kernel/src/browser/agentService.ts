@@ -15,18 +15,9 @@ import type { ChatMessage } from '../core/OpenAICompatibleClient'
 import type { AgentEvent as CoreAgentEvent } from '../core/protocol'
 import type { ToolDefinition } from '../core/types'
 import { fetchGetTool } from '../core/tools/fetchGet'
+import type { SettingsAdapter } from '../adapters/SettingsAdapter'
 
-// Temporary local shape; replaced by SettingsAdapter interface in Phase 2.
-// Consumers pass a `loadSettings: () => Promise<Settings>` callback today.
-export interface Settings {
-  apiKey: string
-  baseUrl: string
-  model: string
-  systemPromptAddendum?: string
-  toolMaxIterations?: number
-  // additional fields the consumer settings object may carry — passthrough
-  [key: string]: unknown
-}
+export type { Settings } from '../adapters/SettingsAdapter'
 
 export interface RunTurnInput {
   sessionId: string
@@ -61,7 +52,7 @@ interface HistoryRow {
 }
 
 export interface AgentServiceDeps {
-  loadSettings: () => Promise<Settings>
+  settings: SettingsAdapter
   /** Posts a wire event to whoever is consuming agent output (in production:
    *  the SW port back to clients via the hub). */
   emit: (ev: any) => void
@@ -110,7 +101,7 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
         'ephemeral:',
         !!cmd.ephemeral,
       )
-      const settings = await deps.loadSettings()
+      const settings = await deps.settings.load()
       console.log(
         '[mycli-web/agent] settings loaded; apiKey set:',
         !!settings.apiKey,

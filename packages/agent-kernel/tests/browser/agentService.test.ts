@@ -57,7 +57,7 @@ function makeDeps(opts: {
   )
 
   const deps = {
-    loadSettings: async () => opts.settings ?? defaultSettings(),
+    settings: { load: async () => opts.settings ?? defaultSettings() },
     emit: (ev: any) => {
       events.push(ev)
     },
@@ -221,7 +221,7 @@ describe('agentService.runTurn', () => {
       cancel: fake.session.cancel,
     }
     const deps: any = {
-      loadSettings: async () => defaultSettings(),
+      settings: { load: async () => defaultSettings() },
       emit: () => {},
       appendMessage: vi.fn(async (m) => ({
         id: m.role === 'user' ? 'user-id' : 'assistant-id',
@@ -262,7 +262,7 @@ describe('agentService.runTurn', () => {
     ]
     const fake = makeFakeAgent(agentEvents)
     const deps: any = {
-      loadSettings: async () => defaultSettings(),
+      settings: { load: async () => defaultSettings() },
       emit: (ev: any) => events.push(ev),
       appendMessage: async () => ({ id: 'x', createdAt: 0 }),
       listMessagesByConversation: async () => [],
@@ -300,7 +300,7 @@ describe('agentService.runTurn', () => {
       cancel: () => {},
     }
     const deps: any = {
-      loadSettings: async () => defaultSettings(),
+      settings: { load: async () => defaultSettings() },
       emit: (ev: any) => events.push(ev),
       appendMessage: async () => ({ id: 'x', createdAt: 0 }),
       listMessagesByConversation: async () => [],

@@ -63,8 +63,10 @@ export {
   type AgentService,
   type AgentServiceDeps,
   type RunTurnInput,
-  type Settings,
 } from './browser/agentService'
+
+// === adapters ===
+export type { Settings, SettingsAdapter } from './adapters'
 
 // === browser RPC helpers / chrome.* polyfill ===
 export { sendDomOp, callChromeApi } from './browser/domOpClient'

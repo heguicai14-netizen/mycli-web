@@ -18,7 +18,7 @@ import {
 } from 'agent-kernel'
 import { extensionTools, type ExtensionToolCtx, type ExtensionToolRpc } from '@ext-tools'
 import { useSkillTool, readSkillFileTool } from '@ext-skills'
-import { loadSettings } from './storage/settings'
+import { mycliSettingsAdapter } from './settingsAdapter'
 
 console.log('[mycli-web] offscreen agent runtime booted at', new Date().toISOString())
 
@@ -150,7 +150,7 @@ async function buildToolContext(cid: string | undefined): Promise<ExtensionToolC
 }
 
 const agentService = createAgentService({
-  loadSettings,
+  settings: mycliSettingsAdapter,
   emit,
   appendMessage,
   listMessagesByConversation,
