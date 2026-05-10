@@ -5,7 +5,7 @@
     "rootDir": ".",
     "outDir": "../../node_modules/.cache/tsc/extension-skills",
     "tsBuildInfoFile": "../../node_modules/.cache/tsc/extension-skills.tsbuildinfo",
-    "types": ["vite/client"]
+    "types": ["chrome", "vite/client"]
   },
   "references": [],
   "include": ["**/*.ts"]

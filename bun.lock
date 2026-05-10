@@ -5,6 +5,7 @@
     "": {
       "name": "mycli-web",
       "devDependencies": {
+        "@types/chrome": "^0.0.270",
         "typescript": "^5.5.3",
       },
     },
