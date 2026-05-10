@@ -63,7 +63,11 @@ export class QueryEngine {
         }
       } catch (e: any) {
         const msg = e?.message ?? String(e)
-        yield { kind: 'done', stopReason: 'error', error: { code: 'llm_error', message: msg } }
+        yield {
+          kind: 'done',
+          stopReason: 'error',
+          error: { code: e?.code ?? 'llm_error', message: msg },
+        }
         return
       }
 

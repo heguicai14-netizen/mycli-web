@@ -60,10 +60,28 @@ export type StreamEvent =
       toolCalls?: Array<{ id: string; name: string; input: unknown }>
     }
 
+import { classifyError } from '../errors'
+
 export class OpenAICompatibleClient {
   constructor(private cfg: ClientConfig) {}
 
   async *streamChat(req: ChatRequest): AsyncIterable<StreamEvent> {
+    try {
+      yield* this.streamChatInner(req)
+    } catch (e) {
+      const classified = classifyError(e)
+      const wrappedError = Object.assign(new Error(classified.message), {
+        code: classified.code,
+        retryable: classified.retryable,
+        cause: classified.cause,
+        // Preserve HTTP status if present so downstream consumers can still inspect it
+        ...(typeof (e as any)?.status === 'number' ? { status: (e as any).status } : {}),
+      })
+      throw wrappedError
+    }
+  }
+
+  private async *streamChatInner(req: ChatRequest): AsyncIterable<StreamEvent> {
     const url = `${this.cfg.baseUrl.replace(/\/$/, '')}/chat/completions`
     const body: Record<string, unknown> = {
       model: this.cfg.model,
