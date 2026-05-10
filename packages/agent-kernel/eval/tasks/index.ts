@@ -7,8 +7,14 @@ import { task as getBySelector }    from './L1-basic/get-by-selector.task'
 import { task as fetchJson }        from './L1-basic/fetch-json.task'
 import { task as screenshot }       from './L1-basic/screenshot-describe.task'
 
+import { task as issueSummary }     from './L2-chain/issue-summary.task'
+import { task as crossTabCompare }  from './L2-chain/cross-tab-compare.task'
+import { task as fetchThenExtract } from './L2-chain/fetch-then-extract.task'
+import { task as conditionalBranch }from './L2-chain/conditional-branch.task'
+
 export const builtinSuite: Suite = [
   extractTitle, extractSelection, listTabs,
   getBySelector, fetchJson, screenshot,
-  // L2 added in T19/T20, L3 in T21
+  issueSummary, crossTabCompare, fetchThenExtract, conditionalBranch,
+  // remaining L2 in T20, L3 in T21
 ]
