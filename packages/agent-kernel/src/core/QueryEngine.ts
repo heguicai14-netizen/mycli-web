@@ -6,7 +6,12 @@ import type { ToolCall, ToolResult } from './types'
 
 export type EngineEvent =
   | { kind: 'assistant_delta'; text: string }
-  | { kind: 'assistant_message_complete'; text: string; toolCalls: ToolCall[] }
+  | {
+      kind: 'assistant_message_complete'
+      text: string
+      toolCalls: ToolCall[]
+      usage?: { in: number; out: number }
+    }
   | { kind: 'tool_executing'; call: ToolCall }
   | { kind: 'tool_result'; callId: string; content: string; isError: boolean }
   | {
@@ -40,6 +45,7 @@ export class QueryEngine {
       let assistantText = ''
       let stopReason: 'stop' | 'tool_calls' | 'length' | 'content_filter' | 'unknown' = 'stop'
       let toolCallsFinal: ToolCall[] = []
+      let usageThisIter: { in: number; out: number } | undefined
 
       try {
         for await (const ev of this.opts.client.streamChat({
@@ -59,6 +65,7 @@ export class QueryEngine {
               name: tc.name,
               input: tc.input,
             }))
+            usageThisIter = ev.usage
           }
         }
       } catch (e: any) {
@@ -93,6 +100,7 @@ export class QueryEngine {
         kind: 'assistant_message_complete',
         text: assistantText,
         toolCalls: toolCallsFinal,
+        usage: usageThisIter,
       }
 
       if (stopReason !== 'tool_calls' || toolCallsFinal.length === 0) {
