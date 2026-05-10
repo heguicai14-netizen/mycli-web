@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ClientCmd, AgentEvent, Envelope } from '@ext/rpc/protocol'
+import { ClientCmd, WireAgentEvent as AgentEvent, Envelope } from 'agent-kernel'
 
 describe('ClientCmd schema', () => {
   it('accepts chat/send with valid payload', () => {

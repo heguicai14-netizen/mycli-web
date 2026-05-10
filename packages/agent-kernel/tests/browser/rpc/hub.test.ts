@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { installHub } from '@ext/rpc/hub'
-import { RpcClient } from '@ext/rpc/client'
+import { installHub, RpcClient } from 'agent-kernel'
 
 describe('RPC hub (content ↔ SW)', () => {
   it('round-trips ping → pong with command/ack', async () => {

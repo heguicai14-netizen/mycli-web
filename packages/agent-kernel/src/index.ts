@@ -36,3 +36,23 @@ export { parseSkillMd, type SkillDefinition, type ParsedSkillMd } from './skills
 export { SkillRegistry } from './skills/SkillRegistry'
 export { createUseSkillTool } from './skills/useSkillTool'
 export { createReadSkillFileTool } from './skills/readSkillFileTool'
+
+// === browser RPC ===
+export { installHub, type HubHandle } from './browser/rpc/hub'
+export { RpcClient } from './browser/rpc/client'
+// Wire-protocol AgentEvent is a separate Zod-validated discriminated union
+// from the core engine event. Re-export under a distinct name to avoid
+// collision with the core AgentEvent above. The renamed identifier carries
+// both the runtime Zod schema and the inferred type (TS dual-meaning).
+export { ClientCmd, AgentEvent as WireAgentEvent, Envelope } from './browser/rpc/protocol'
+
+// === browser agent client SDK ===
+export { createAgentClient } from './browser/agentClient'
+export type {
+  AgentClient,
+  MessageOptions,
+  OneShotOptions,
+  OneShotResult,
+  OneShotToolCall,
+  CreateAgentClientOptions,
+} from './browser/agentClient'

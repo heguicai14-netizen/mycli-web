@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { installHub } from '@ext/rpc/hub'
-import { RpcClient } from '@ext/rpc/client'
+import { installHub, RpcClient } from 'agent-kernel'
 
 describe('hub offscreen-forward mode', () => {
   it('forwards ClientCmd to offscreen and routes events back by sessionId', async () => {

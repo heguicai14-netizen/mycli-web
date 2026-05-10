@@ -5,7 +5,7 @@
     "rootDir": "src",
     "outDir": "../../node_modules/.cache/tsc/agent-kernel",
     "tsBuildInfoFile": "../../node_modules/.cache/tsc/agent-kernel.tsbuildinfo",
-    "types": []
+    "types": ["chrome"]
   },
   "include": ["src/**/*.ts"]
 }

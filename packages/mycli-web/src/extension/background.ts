@@ -1,4 +1,4 @@
-import { installHub } from './rpc/hub'
+import { installHub } from 'agent-kernel'
 import { setTransientUi, getTransientUi } from './storage/transient'
 import { installDomOpRouter } from './domOpRouter'
 

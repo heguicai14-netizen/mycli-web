@@ -3,7 +3,7 @@
 import { polyfillChromeApiInOffscreen } from './offscreenChromePolyfill'
 polyfillChromeApiInOffscreen()
 
-import { ClientCmd } from './rpc/protocol'
+import { ClientCmd } from 'agent-kernel'
 import type { ExtensionToolCtx, ExtensionToolRpc } from '@ext-tools'
 import { loadSettings } from './storage/settings'
 import {

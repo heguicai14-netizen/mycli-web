@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Fab } from './fab'
 import { ChatWindow } from '../ui/ChatWindow'
 import type { DisplayMessage, DisplayToolCall } from '../ui/MessageList'
-import { RpcClient } from '../rpc/client'
+import { RpcClient } from 'agent-kernel'
 import { getTransientUi, setTransientUi } from '../storage/transient'
 import { loadSettings } from '../storage/settings'
 

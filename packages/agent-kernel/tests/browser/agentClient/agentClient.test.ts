@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { installHub } from '@ext/rpc/hub'
-import { createAgentClient } from '@ext/agent-client'
+import { installHub, createAgentClient } from 'agent-kernel'
 
 // Stand up a minimal "fake offscreen" that replies to a chat/send the same
 // way the real offscreen does — emits a message/streamChunk, then a final
