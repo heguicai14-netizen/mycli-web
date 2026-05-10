@@ -82,6 +82,26 @@ export function ChatApp() {
                 : p,
             )
           }
+          // Reconcile with an optimistic placeholder added by send() — if a
+          // user message with matching content is sitting in the list with a
+          // synthetic id, swap its id rather than appending a duplicate.
+          if (msg.role === 'user') {
+            const optimisticIdx = prev.findIndex(
+              (p) =>
+                p.id.startsWith('optimistic:') &&
+                p.role === 'user' &&
+                p.content === msg.content,
+            )
+            if (optimisticIdx >= 0) {
+              const copy = [...prev]
+              copy[optimisticIdx] = {
+                ...copy[optimisticIdx],
+                id: msg.id,
+                pending: isPending,
+              }
+              return copy
+            }
+          }
           return [
             ...prev,
             {
@@ -152,6 +172,18 @@ export function ChatApp() {
         }
       })
 
+      // Cross-context runtime errors (uncaught exceptions / unhandled
+      // rejections from SW or offscreen). Surfaces them in this tab's F12
+      // so devs don't have to chase three separate DevTools windows.
+      client.on('runtime/error' as any, (ev: any) => {
+        console.error(
+          `[mycli-web/${ev.source}] runtime error:`,
+          ev.message,
+          ev.stack ?? '',
+        )
+        setErrorBanner({ text: `${ev.source} error: ${ev.message}` })
+      })
+
       // Resubscribe to the active conversation so reopening the chat or
       // navigating between pages restores prior messages from IDB.
       try {
@@ -164,7 +196,20 @@ export function ChatApp() {
         if (msg?.kind === 'content/activate') setOpen(true)
       }
       chrome.runtime.onMessage.addListener(tabListener)
-      cleanup = () => chrome.runtime.onMessage.removeListener(tabListener)
+
+      // MV3 service workers die after ~30s idle. After a long agent turn the
+      // session port goes quiet, the SW gets killed, and the next chat/send
+      // hits a "zombie port" (not disconnected on this side, but the message
+      // never arrives at the new SW). Send a ping every 25s to keep the SW
+      // warm. The hub acks pings unconditionally, so this is a no-op turn.
+      const heartbeat = setInterval(() => {
+        clientRef.current?.send({ kind: 'ping' }).catch(() => {})
+      }, 25_000)
+
+      cleanup = () => {
+        chrome.runtime.onMessage.removeListener(tabListener)
+        clearInterval(heartbeat)
+      }
     })()
     return () => {
       cleanup?.()
@@ -183,6 +228,14 @@ export function ChatApp() {
       setErrorBanner({ text: 'RpcClient not connected — check SW/offscreen.' })
       return
     }
+    // Optimistic UI: show the user's message immediately so they see it land
+    // even if the SW is slow to wake up or the round-trip lags. The real
+    // message/appended echo from offscreen will reconcile this entry by id.
+    const optimisticId = `optimistic:${crypto.randomUUID()}`
+    setMessages((prev) => [
+      ...prev,
+      { id: optimisticId, role: 'user', content: text },
+    ])
     setBusy(true)
     setErrorBanner(undefined)
     clientRef.current.send({ kind: 'chat/send', text }).then((ack) => {
