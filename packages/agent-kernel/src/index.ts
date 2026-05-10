@@ -66,7 +66,15 @@ export {
 } from './browser/agentService'
 
 // === adapters ===
-export type { Settings, SettingsAdapter } from './adapters'
+export type {
+  Settings,
+  SettingsAdapter,
+  MessageStoreAdapter,
+  MessageRecord,
+  AppendMessageInput,
+  AppendedMessage,
+} from './adapters'
+export { createIdbMessageStore } from './browser/storage/createIdbMessageStore'
 
 // === browser RPC helpers / chrome.* polyfill ===
 export { sendDomOp, callChromeApi } from './browser/domOpClient'

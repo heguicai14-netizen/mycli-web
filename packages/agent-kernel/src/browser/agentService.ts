@@ -16,6 +16,7 @@ import type { AgentEvent as CoreAgentEvent } from '../core/protocol'
 import type { ToolDefinition } from '../core/types'
 import { fetchGetTool } from '../core/tools/fetchGet'
 import type { SettingsAdapter } from '../adapters/SettingsAdapter'
+import type { MessageStoreAdapter } from '../adapters/MessageStoreAdapter'
 
 export type { Settings } from '../adapters/SettingsAdapter'
 
@@ -32,37 +33,14 @@ export interface RunTurnInput {
   ephemeral?: boolean
 }
 
-interface AppendMessageInput {
-  conversationId: string
-  role: 'user' | 'assistant'
-  content: string
-  pending?: boolean
-}
-
-interface AppendedMessage {
-  id: string
-  createdAt: number
-}
-
-interface HistoryRow {
-  id: string
-  role: string
-  content: unknown
-  compacted?: boolean
-}
-
 export interface AgentServiceDeps {
   settings: SettingsAdapter
   /** Posts a wire event to whoever is consuming agent output (in production:
    *  the SW port back to clients via the hub). */
   emit: (ev: any) => void
-  appendMessage: (msg: AppendMessageInput) => Promise<AppendedMessage>
-  listMessagesByConversation: (cid: string) => Promise<HistoryRow[]>
-  updateMessage: (
-    id: string,
-    patch: { content?: string; pending?: boolean },
-  ) => Promise<void>
-  activeConversationId: () => Promise<string>
+  /** Persistence + active-conversation source for chat turns. Kernel ships a
+   *  default IDB-backed implementation via createIdbMessageStore(). */
+  messageStore: MessageStoreAdapter
   /** Build the per-turn ToolExecContext (tabId, rpc, etc). cid is undefined
    *  for ephemeral turns. The returned context is passed verbatim as the
    *  agent's ExtraCtx — kernel doesn't care about its shape. */
@@ -124,13 +102,13 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
       }
 
       const ephemeral = !!cmd.ephemeral
-      const cid = ephemeral ? null : await deps.activeConversationId()
+      const cid = ephemeral ? null : await deps.messageStore.activeConversationId()
 
       const userTs = Date.now()
       const userMsgId = ephemeral
         ? crypto.randomUUID()
         : (
-            await deps.appendMessage({
+            await deps.messageStore.append({
               conversationId: cid!,
               role: 'user',
               content: cmd.text,
@@ -151,7 +129,7 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
 
       let priorHistory: ChatMessage[] = []
       if (!ephemeral) {
-        const allHistory = await deps.listMessagesByConversation(cid!)
+        const allHistory = await deps.messageStore.list(cid!)
         priorHistory = allHistory
           .filter((m) => !m.compacted)
           .filter((m) => m.id !== userMsgId)
@@ -193,7 +171,7 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
       const assistantMsgId = ephemeral
         ? crypto.randomUUID()
         : (
-            await deps.appendMessage({
+            await deps.messageStore.append({
               conversationId: cid!,
               role: 'assistant',
               content: '',
@@ -250,7 +228,7 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
             })
           } else if (ev.kind === 'done') {
             if (!ephemeral) {
-              await deps.updateMessage(assistantMsg.id, {
+              await deps.messageStore.update(assistantMsg.id, {
                 content: ev.assistantText,
                 pending: false,
               })

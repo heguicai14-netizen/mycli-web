@@ -56,23 +56,27 @@ function makeDeps(opts: {
     ],
   )
 
+  const messageStore = {
+    append: vi.fn(async (msg: any) => {
+      idbCalls.push(`append:${msg.role}`)
+      return { id: `msg-${idbCalls.length}`, createdAt: 1000 + idbCalls.length }
+    }),
+    list: vi.fn(async () => {
+      idbCalls.push('list')
+      return opts.history ?? []
+    }),
+    update: vi.fn(async () => {
+      idbCalls.push('update')
+    }),
+    activeConversationId: vi.fn(async () => 'conv-1'),
+  }
+
   const deps = {
     settings: { load: async () => opts.settings ?? defaultSettings() },
     emit: (ev: any) => {
       events.push(ev)
     },
-    appendMessage: vi.fn(async (msg: any) => {
-      idbCalls.push(`append:${msg.role}`)
-      return { id: `msg-${idbCalls.length}`, createdAt: 1000 + idbCalls.length }
-    }),
-    listMessagesByConversation: vi.fn(async () => {
-      idbCalls.push('list')
-      return opts.history ?? []
-    }),
-    updateMessage: vi.fn(async () => {
-      idbCalls.push('update')
-    }),
-    activeConversationId: vi.fn(async () => 'conv-1'),
+    messageStore,
     buildToolContext: vi.fn(async () => ({
       rpc: { domOp: vi.fn(), chromeApi: vi.fn() },
       tabId: 99,
@@ -85,12 +89,12 @@ function makeDeps(opts: {
     }),
   }
 
-  return { deps, events, idbCalls, fake }
+  return { deps, events, idbCalls, fake, messageStore }
 }
 
 describe('agentService.runTurn', () => {
   it('emits fatalError when no apiKey is configured', async () => {
-    const { deps, events } = makeDeps({
+    const { deps, events, messageStore } = makeDeps({
       settings: defaultSettings({ apiKey: '' }),
     })
     const svc = createAgentService(deps as any)
@@ -99,7 +103,7 @@ describe('agentService.runTurn', () => {
     expect(events).toHaveLength(1)
     expect(events[0].kind).toBe('fatalError')
     expect(events[0].code).toBe('no_api_key')
-    expect(deps.appendMessage).not.toHaveBeenCalled()
+    expect(messageStore.append).not.toHaveBeenCalled()
     expect(deps.createAgent).not.toHaveBeenCalled()
   })
 
@@ -128,15 +132,15 @@ describe('agentService.runTurn', () => {
   })
 
   it('ephemeral path skips IDB entirely', async () => {
-    const { deps, events, idbCalls } = makeDeps({})
+    const { deps, events, idbCalls, messageStore } = makeDeps({})
     const svc = createAgentService(deps as any)
     await svc.runTurn({ sessionId: 's1', text: 'hi', ephemeral: true })
 
     expect(idbCalls).toEqual([])
-    expect(deps.appendMessage).not.toHaveBeenCalled()
-    expect(deps.listMessagesByConversation).not.toHaveBeenCalled()
-    expect(deps.updateMessage).not.toHaveBeenCalled()
-    expect(deps.activeConversationId).not.toHaveBeenCalled()
+    expect(messageStore.append).not.toHaveBeenCalled()
+    expect(messageStore.list).not.toHaveBeenCalled()
+    expect(messageStore.update).not.toHaveBeenCalled()
+    expect(messageStore.activeConversationId).not.toHaveBeenCalled()
 
     // Wire shape preserved — UI consumers see the same event sequence as the persistent path.
     const kinds = events.map((e) => e.kind)
@@ -223,18 +227,20 @@ describe('agentService.runTurn', () => {
     const deps: any = {
       settings: { load: async () => defaultSettings() },
       emit: () => {},
-      appendMessage: vi.fn(async (m) => ({
-        id: m.role === 'user' ? 'user-id' : 'assistant-id',
-        createdAt: 0,
-      })),
-      listMessagesByConversation: vi.fn(async () => [
-        { id: 'old-1', role: 'user', content: 'first turn user' },
-        { id: 'old-2', role: 'assistant', content: 'first turn reply' },
-        { id: 'user-id', role: 'user', content: 'this turn — should be filtered' },
-        { id: 'cmp-1', role: 'system-synth', content: 'compacted', compacted: true },
-      ]),
-      updateMessage: vi.fn(),
-      activeConversationId: vi.fn(async () => 'conv-1'),
+      messageStore: {
+        append: vi.fn(async (m) => ({
+          id: m.role === 'user' ? 'user-id' : 'assistant-id',
+          createdAt: 0,
+        })),
+        list: vi.fn(async () => [
+          { id: 'old-1', role: 'user', content: 'first turn user' },
+          { id: 'old-2', role: 'assistant', content: 'first turn reply' },
+          { id: 'user-id', role: 'user', content: 'this turn — should be filtered' },
+          { id: 'cmp-1', role: 'system-synth', content: 'compacted', compacted: true },
+        ]),
+        update: vi.fn(),
+        activeConversationId: vi.fn(async () => 'conv-1'),
+      },
       buildToolContext: vi.fn(async () => ({
         rpc: { domOp: vi.fn(), chromeApi: vi.fn() },
         tabId: undefined,
@@ -264,10 +270,12 @@ describe('agentService.runTurn', () => {
     const deps: any = {
       settings: { load: async () => defaultSettings() },
       emit: (ev: any) => events.push(ev),
-      appendMessage: async () => ({ id: 'x', createdAt: 0 }),
-      listMessagesByConversation: async () => [],
-      updateMessage: async () => {},
-      activeConversationId: async () => 'conv-1',
+      messageStore: {
+        append: async () => ({ id: 'x', createdAt: 0 }),
+        list: async () => [],
+        update: async () => {},
+        activeConversationId: async () => 'conv-1',
+      },
       buildToolContext: async () => ({
         rpc: { domOp: vi.fn(), chromeApi: vi.fn() },
         tabId: undefined,
@@ -302,10 +310,12 @@ describe('agentService.runTurn', () => {
     const deps: any = {
       settings: { load: async () => defaultSettings() },
       emit: (ev: any) => events.push(ev),
-      appendMessage: async () => ({ id: 'x', createdAt: 0 }),
-      listMessagesByConversation: async () => [],
-      updateMessage: async () => {},
-      activeConversationId: async () => 'conv-1',
+      messageStore: {
+        append: async () => ({ id: 'x', createdAt: 0 }),
+        list: async () => [],
+        update: async () => {},
+        activeConversationId: async () => 'conv-1',
+      },
       buildToolContext: async () => ({
         rpc: { domOp: vi.fn(), chromeApi: vi.fn() },
         tabId: undefined,

@@ -6,15 +6,14 @@ polyfillChromeApiInOffscreen()
 import {
   ClientCmd,
   createAgentService,
+  createIdbMessageStore,
   sendDomOp,
   callChromeApi,
   fetchGetTool,
   createConversation,
   getConversation,
   listConversations,
-  appendMessage,
   listMessagesByConversation,
-  updateMessage,
 } from 'agent-kernel'
 import { extensionTools, type ExtensionToolCtx, type ExtensionToolRpc } from '@ext-tools'
 import { useSkillTool, readSkillFileTool } from '@ext-skills'
@@ -152,10 +151,7 @@ async function buildToolContext(cid: string | undefined): Promise<ExtensionToolC
 const agentService = createAgentService({
   settings: mycliSettingsAdapter,
   emit,
-  appendMessage,
-  listMessagesByConversation,
-  updateMessage,
-  activeConversationId,
+  messageStore: createIdbMessageStore({ defaultConversationTitle: 'New chat' }),
   buildToolContext,
   // Kernel default is just [fetchGetTool]; extend with mycli-web's
   // extension/skill tool sets explicitly.
