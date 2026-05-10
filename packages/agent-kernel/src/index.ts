@@ -37,6 +37,16 @@ export { SkillRegistry } from './skills/SkillRegistry'
 export { createUseSkillTool } from './skills/useSkillTool'
 export { createReadSkillFileTool } from './skills/readSkillFileTool'
 
+// === skill loaders (consumers pick based on env) ===
+// viteGlobLoader: Vite/import.meta.glob (browser bundler).
+// fsLoader: Node/Bun (CLI / scripts) — uses dynamic node:fs imports so it
+// is tree-shaken out of browser bundles.
+export {
+  loadSkillsFromViteGlob,
+  buildRegistryFromModules,
+} from './skills/loaders/viteGlobLoader'
+export { loadSkillsFromFs } from './skills/loaders/fsLoader'
+
 // === browser RPC ===
 export { installHub, type HubHandle } from './browser/rpc/hub'
 export { RpcClient } from './browser/rpc/client'

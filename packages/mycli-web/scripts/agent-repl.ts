@@ -31,11 +31,11 @@ import {
   makeError,
   createUseSkillTool,
   createReadSkillFileTool,
+  loadSkillsFromFs,
   type ChatMessage,
   type ToolDefinition,
   fetchGetTool,
 } from 'agent-kernel'
-import { buildRegistryFromModules } from '../src/extension-skills/loader'
 
 interface Creds {
   apiKey: string
@@ -119,35 +119,17 @@ const currentTimeTool: ToolDefinition<Record<string, never>, { time: string }, a
 }
 
 // Load bundled skills from disk so the REPL has the same useSkill /
-// readSkillFile capability the extension does. Uses the same loader as the
-// extension (the part that doesn't touch import.meta.glob), but constructs
-// the modules dict via fs at runtime since Bun doesn't run Vite transforms.
-function loadSkillsFromDisk() {
-  const skillsRoot = path.resolve(
-    path.dirname(new URL(import.meta.url).pathname),
-    '..',
-    'src',
-    'extension-skills',
-    'skills',
-  )
-  const modules: Record<string, string> = {}
-  if (!fs.existsSync(skillsRoot)) return buildRegistryFromModules(modules)
-  // Recursively walk skillsRoot, mirroring vite's './skills/<name>/<rest>' keying.
-  const walk = (dir: string, relPrefix: string) => {
-    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
-      const abs = path.join(dir, ent.name)
-      const rel = relPrefix ? `${relPrefix}/${ent.name}` : ent.name
-      if (ent.isDirectory()) walk(abs, rel)
-      else if (ent.isFile() && ent.name.endsWith('.md')) {
-        modules[`./skills/${rel}`] = fs.readFileSync(abs, 'utf-8')
-      }
-    }
-  }
-  walk(skillsRoot, '')
-  return buildRegistryFromModules(modules)
-}
-
-const skillRegistry = loadSkillsFromDisk()
+// readSkillFile capability the extension does. Delegates to the kernel's
+// fsLoader — Bun doesn't run Vite transforms, so we can't use the
+// import.meta.glob path the extension uses.
+const skillsRoot = path.resolve(
+  path.dirname(new URL(import.meta.url).pathname),
+  '..',
+  'src',
+  'extension-skills',
+  'skills',
+)
+const skillRegistry = await loadSkillsFromFs(skillsRoot)
 const useSkillTool = createUseSkillTool({ registry: skillRegistry })
 const readSkillFileTool = createReadSkillFileTool({ registry: skillRegistry })
 

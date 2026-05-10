@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildRegistryFromModules } from '@ext-skills/loader'
+import { loadSkillsFromViteGlob as buildRegistryFromModules } from 'agent-kernel'
 
 const goodSkill = `---
 name: summarizePage

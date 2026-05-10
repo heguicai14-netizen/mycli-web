@@ -1,14 +1,19 @@
-import { SkillRegistry, parseSkillMd } from 'agent-kernel'
+import { SkillRegistry } from '../SkillRegistry'
+import { parseSkillMd } from '../Skill'
 
 /**
  * Build a SkillRegistry from a flat path → raw-content map. Path keys must
  * look like './skills/<skillName>/SKILL.md' or
  * './skills/<skillName>/<relPath>'. Anything outside './skills/' is ignored.
  *
- * Pulled out of index.ts so it can be unit-tested with a synthetic dict
- * (no real Vite glob needed).
+ * Use this with Vite's import.meta.glob:
+ *
+ *   const modules = import.meta.glob('./skills/<asterisk><asterisk>/<asterisk>.md', {
+ *     query: '?raw', eager: true, import: 'default',
+ *   }) as Record<string, string>
+ *   const registry = loadSkillsFromViteGlob(modules)
  */
-export function buildRegistryFromModules(
+export function loadSkillsFromViteGlob(
   modules: Record<string, string>,
 ): SkillRegistry {
   // Group entries by skill folder name.
@@ -59,3 +64,6 @@ export function buildRegistryFromModules(
   }
   return registry
 }
+
+/** Backward-compat alias for the original mycli-web export name. */
+export const buildRegistryFromModules = loadSkillsFromViteGlob

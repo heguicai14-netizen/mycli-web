@@ -1,5 +1,8 @@
-import { createUseSkillTool, createReadSkillFileTool } from 'agent-kernel'
-import { buildRegistryFromModules } from './loader'
+import {
+  createUseSkillTool,
+  createReadSkillFileTool,
+  loadSkillsFromViteGlob,
+} from 'agent-kernel'
 
 // Vite-compile-time glob of every markdown file under skills/. Returns a
 // path-keyed map of raw strings. Eager: false would require .then() at the
@@ -10,7 +13,7 @@ const modules = import.meta.glob('./skills/**/*.md', {
   import: 'default',
 }) as Record<string, string>
 
-export const skillRegistry = buildRegistryFromModules(modules)
+export const skillRegistry = loadSkillsFromViteGlob(modules)
 export const useSkillTool = createUseSkillTool({ registry: skillRegistry })
 export const readSkillFileTool = createReadSkillFileTool({
   registry: skillRegistry,
