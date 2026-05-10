@@ -15,6 +15,18 @@ export function ChatApp() {
     { text: string; action?: { label: string; kind: 'open-options' } } | undefined
   >(undefined)
   const [position, setPosition] = useState<'bottom-right' | 'bottom-left'>('bottom-right')
+  // Latest observed prompt_tokens for the active assistant message. Each
+  // iteration overwrites — represents "what's currently in the model's context".
+  const [contextTokens, setContextTokens] = useState<number | null>(null)
+  const [contextLimit, setContextLimit] = useState<number>(128_000)
+  const [contextThresholdPercent, setContextThresholdPercent] = useState<number>(75)
+  const [compactStatus, setCompactStatus] = useState<
+    | { phase: 'running'; messages: number }
+    | { phase: 'done'; messages: number; saved: number }
+    | { phase: 'failed'; reason: string }
+    | null
+  >(null)
+  const compactHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const clientRef = useRef<RpcClient | null>(null)
   const lastAssistantIdRef = useRef<string | null>(null)
 
@@ -37,9 +49,25 @@ export function ChatApp() {
       try {
         const settings = await loadSettings()
         setPosition(settings.fab.position)
+        setContextLimit(settings.autoCompact.modelContextWindow)
+        setContextThresholdPercent(settings.autoCompact.thresholdPercent)
       } catch (e) {
         console.warn('[mycli-web] loadSettings failed (non-fatal):', e)
       }
+      // Refresh context bar settings if user changes them in Options while
+      // the chat is open.
+      const onStorageChanged = (
+        changes: { [key: string]: chrome.storage.StorageChange },
+        area: chrome.storage.AreaName,
+      ) => {
+        if (area !== 'local' || !changes.mycliWebSettings) return
+        const next = changes.mycliWebSettings.newValue?.autoCompact
+        if (next) {
+          if (typeof next.modelContextWindow === 'number') setContextLimit(next.modelContextWindow)
+          if (typeof next.thresholdPercent === 'number') setContextThresholdPercent(next.thresholdPercent)
+        }
+      }
+      chrome.storage.onChanged.addListener(onStorageChanged)
       try {
         const ui = await getTransientUi()
         setOpen(ui.panelOpen)
@@ -118,6 +146,32 @@ export function ChatApp() {
           // emitted at runChat start carries pending: true and must NOT clear it).
           if (!isPending) setBusy(false)
         }
+      })
+
+      client.on('compact/started', (ev: any) => {
+        if (compactHideTimerRef.current) {
+          clearTimeout(compactHideTimerRef.current)
+          compactHideTimerRef.current = null
+        }
+        setCompactStatus({ phase: 'running', messages: ev.messagesToCompact })
+      })
+
+      client.on('compact/completed', (ev: any) => {
+        const saved = Math.max(0, ev.beforeTokens - ev.afterTokens)
+        setCompactStatus({ phase: 'done', messages: ev.messagesCompacted, saved })
+        compactHideTimerRef.current = setTimeout(() => setCompactStatus(null), 4000)
+      })
+
+      client.on('compact/failed', (ev: any) => {
+        setCompactStatus({ phase: 'failed', reason: ev.reason })
+        compactHideTimerRef.current = setTimeout(() => setCompactStatus(null), 6000)
+      })
+
+      client.on('message/usage', (ev: any) => {
+        // input = prompt_tokens of the latest LLM call = "what's currently in
+        // the model's context window". Each iteration overwrites because this
+        // value already counts everything before it (history + system + user).
+        setContextTokens(ev.input)
       })
 
       client.on('message/streamChunk', (ev: any) => {
@@ -208,7 +262,9 @@ export function ChatApp() {
 
       cleanup = () => {
         chrome.runtime.onMessage.removeListener(tabListener)
+        chrome.storage.onChanged.removeListener(onStorageChanged)
         clearInterval(heartbeat)
+        if (compactHideTimerRef.current) clearTimeout(compactHideTimerRef.current)
       }
     })()
     return () => {
@@ -261,6 +317,12 @@ export function ChatApp() {
     setMessages([])
     setToolCalls([])
     lastAssistantIdRef.current = null
+    setContextTokens(null)
+    setCompactStatus(null)
+    if (compactHideTimerRef.current) {
+      clearTimeout(compactHideTimerRef.current)
+      compactHideTimerRef.current = null
+    }
     setBusy(false)
     setErrorBanner(undefined)
     clientRef.current.send({ kind: 'chat/newConversation' })
@@ -290,6 +352,10 @@ export function ChatApp() {
           busy={busy}
           errorBanner={errorBanner}
           onDismissError={dismissError}
+          contextTokens={contextTokens}
+          contextLimit={contextLimit}
+          contextThresholdPercent={contextThresholdPercent}
+          compactStatus={compactStatus}
         />
       )}
     </>

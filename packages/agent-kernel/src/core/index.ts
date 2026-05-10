@@ -5,6 +5,7 @@ export { QueryEngine, type EngineEvent } from './QueryEngine'
 export { ToolRegistry } from './ToolRegistry'
 export { toOpenAiTool, makeOk, makeError } from './Tool'
 export { fetchGetTool } from './tools/fetchGet'
+export { compactMessages, type CompactInput } from './compactor'
 export { AgentEvent } from './protocol'
 export type {
   ToolDefinition,

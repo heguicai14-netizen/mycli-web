@@ -12,11 +12,14 @@ import {
 } from '../core/createAgent'
 import type { AgentSession as CoreAgentSession } from '../core/AgentSession'
 import type { ChatMessage } from '../core/OpenAICompatibleClient'
+import { OpenAICompatibleClient } from '../core/OpenAICompatibleClient'
 import type { AgentEvent as CoreAgentEvent } from '../core/protocol'
 import type { ToolDefinition } from '../core/types'
 import { fetchGetTool } from '../core/tools/fetchGet'
+import { compactMessages } from '../core/compactor'
+import { estimateMessageTokens, estimateTokens } from '../core/tokenBudget'
 import type { SettingsAdapter } from '../adapters/SettingsAdapter'
-import type { MessageStoreAdapter } from '../adapters/MessageStoreAdapter'
+import type { MessageStoreAdapter, MessageRecord } from '../adapters/MessageStoreAdapter'
 import type { ToolContextBuilder } from '../adapters/ToolContextBuilder'
 
 export type { Settings } from '../adapters/SettingsAdapter'
@@ -52,6 +55,14 @@ export interface AgentServiceDeps {
   createAgent?: <ExtraCtx>(
     opts: CreateAgentOptions<ExtraCtx>,
   ) => CoreAgentSession<ExtraCtx>
+  /** Override the compactor used for auto-compaction summaries. Tests inject
+   *  this to avoid spinning up a real OpenAI-compatible client. */
+  compact?: (input: {
+    messages: ChatMessage[]
+    apiKey: string
+    baseUrl: string
+    model: string
+  }) => Promise<string>
 }
 
 export interface AgentService {
@@ -71,6 +82,12 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
   // pass an explicit `tools: [...]` list.
   const allTools = deps.tools ?? [fetchGetTool]
   const createAgent = deps.createAgent ?? defaultCreateAgent
+  const compactImpl =
+    deps.compact ??
+    (async ({ messages, apiKey, baseUrl, model }) => {
+      const client = new OpenAICompatibleClient({ apiKey, baseUrl, model })
+      return compactMessages({ messages, client })
+    })
 
   return {
     async runTurn(cmd, onAbortable) {
@@ -128,23 +145,135 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
         },
       })
 
-      let priorHistory: ChatMessage[] = []
-      if (!ephemeral) {
-        const allHistory = await deps.messageStore.list(cid!)
-        priorHistory = allHistory
-          .filter((m) => !m.compacted)
-          .filter((m) => m.id !== userMsgId)
-          .map((m) => ({
-            role:
-              m.role === 'system-synth'
-                ? 'system'
-                : (m.role as ChatMessage['role']),
-            content:
-              typeof m.content === 'string'
-                ? m.content
-                : JSON.stringify(m.content),
-          }))
+      // Build (or rebuild after compaction) the prior history sent to the LLM.
+      // Tracks both the chat-shaped messages and the source records so we can
+      // map a slice back to record ids for markCompacted().
+      async function buildPriorHistory(): Promise<{
+        chat: ChatMessage[]
+        records: MessageRecord[]
+      }> {
+        if (ephemeral || !cid) return { chat: [], records: [] }
+        const all = await deps.messageStore.list(cid)
+        const eligible = all.filter((m) => !m.compacted && m.id !== userMsgId)
+        const chat: ChatMessage[] = eligible.map((m) => ({
+          role:
+            m.role === 'system-synth'
+              ? 'system'
+              : (m.role as ChatMessage['role']),
+          content:
+            typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+        }))
+        return { chat, records: eligible }
       }
+
+      let { chat: priorHistory, records: priorRecords } = await buildPriorHistory()
+
+      // ---------- Auto-compaction phase ----------
+      const ac = settings.autoCompact
+      const canCompact =
+        !!ac?.enabled &&
+        !ephemeral &&
+        !!cid &&
+        typeof deps.messageStore.markCompacted === 'function' &&
+        priorRecords.length > (ac?.keepRecentMessages ?? 0)
+
+      if (canCompact && ac) {
+        const threshold = Math.floor(
+          (ac.modelContextWindow * ac.thresholdPercent) / 100,
+        )
+        const beforeTokens =
+          priorHistory.reduce((acc, m) => acc + estimateMessageTokens(m), 0) +
+          estimateTokens(cmd.text) +
+          estimateTokens(cmd.system ?? settings.systemPromptAddendum ?? '')
+
+        if (beforeTokens > threshold) {
+          const headRecords = priorRecords.slice(
+            0,
+            priorRecords.length - ac.keepRecentMessages,
+          )
+          const headChat = priorHistory.slice(0, headRecords.length)
+
+          deps.emit({
+            id: crypto.randomUUID(),
+            sessionId: cmd.sessionId,
+            ts: Date.now(),
+            kind: 'compact/started',
+            messagesToCompact: headRecords.length,
+            estimatedTokens: beforeTokens,
+            threshold,
+          })
+
+          // Cancellation during compaction isn't user-cancellable in v1 — the
+          // OpenAI client's fetchTimeoutMs caps the wait, so users see at most
+          // ~60s before the orchestrator either succeeds or emits compact/failed.
+          try {
+            const summary = await compactImpl({
+              messages: headChat,
+              apiKey: settings.apiKey,
+              baseUrl: settings.baseUrl,
+              model: cmd.model ?? settings.model,
+            })
+
+            const summaryRow = await deps.messageStore.append({
+              conversationId: cid!,
+              role: 'system-synth',
+              content: summary,
+            })
+            await deps.messageStore.markCompacted!(
+              headRecords.map((r) => r.id),
+            )
+
+            // Surface the synthesized summary in the UI as an appended message
+            // so the user can see what was compacted in.
+            deps.emit({
+              id: crypto.randomUUID(),
+              sessionId: cmd.sessionId,
+              ts: Date.now(),
+              kind: 'message/appended',
+              message: {
+                id: summaryRow.id,
+                role: 'system-synth',
+                content: summary,
+                createdAt: summaryRow.createdAt,
+              },
+            })
+
+            // Rebuild history; the new system-synth row is now eligible (not
+            // compacted) and will appear at the head as a system message.
+            const rebuilt = await buildPriorHistory()
+            priorHistory = rebuilt.chat
+            priorRecords = rebuilt.records
+
+            const afterTokens =
+              priorHistory.reduce(
+                (acc, m) => acc + estimateMessageTokens(m),
+                0,
+              ) + estimateTokens(cmd.text)
+
+            deps.emit({
+              id: crypto.randomUUID(),
+              sessionId: cmd.sessionId,
+              ts: Date.now(),
+              kind: 'compact/completed',
+              messagesCompacted: headRecords.length,
+              beforeTokens,
+              afterTokens,
+              summaryMessageId: summaryRow.id,
+            })
+          } catch (e: any) {
+            // Compaction is best-effort: any failure (network, abort,
+            // adapter error) degrades to "skip this turn, use full history".
+            deps.emit({
+              id: crypto.randomUUID(),
+              sessionId: cmd.sessionId,
+              ts: Date.now(),
+              kind: 'compact/failed',
+              reason: e?.message ?? String(e),
+            })
+          }
+        }
+      }
+      // ---------- end auto-compaction ----------
 
       const toolContext = await deps.toolContext.build(cid ?? undefined)
       const filteredTools = cmd.tools
@@ -209,6 +338,16 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
               kind: 'message/streamChunk',
               messageId: assistantMsg.id,
               delta: ev.delta,
+            })
+          } else if (ev.kind === 'usage') {
+            deps.emit({
+              id: crypto.randomUUID(),
+              sessionId: cmd.sessionId,
+              ts: Date.now(),
+              kind: 'message/usage',
+              messageId: assistantMsg.id,
+              input: ev.input,
+              output: ev.output,
             })
           } else if (ev.kind === 'tool/start') {
             deps.emit({

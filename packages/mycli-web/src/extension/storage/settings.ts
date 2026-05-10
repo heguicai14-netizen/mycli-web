@@ -19,6 +19,21 @@ export const Settings = z.object({
   auditLogRetentionDays: z.number().int().min(1).max(365).default(30),
   bundledSkillsEnabled: z.array(z.string()).default([]),
   contextAutoInject: z.enum(['none', 'url-title', 'url-title-and-selection']).default('url-title'),
+  autoCompact: z
+    .object({
+      enabled: z.boolean().default(true),
+      // Default 128000 covers gpt-4o / gpt-4o-mini. Users on smaller-context
+      // models (e.g. gpt-3.5 = 16k) should lower this in Options.
+      modelContextWindow: z.number().int().min(2000).max(2_000_000).default(128_000),
+      thresholdPercent: z.number().int().min(10).max(95).default(75),
+      keepRecentMessages: z.number().int().min(2).max(50).default(6),
+    })
+    .default({
+      enabled: true,
+      modelContextWindow: 128_000,
+      thresholdPercent: 75,
+      keepRecentMessages: 6,
+    }),
 })
 export type Settings = z.infer<typeof Settings>
 

@@ -52,6 +52,118 @@ function OptionsApp() {
             className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 font-mono text-sm"
           />
         </label>
+
+        <fieldset className="rounded-md border border-slate-200 p-3">
+          <legend className="px-1 text-sm font-semibold text-slate-700">
+            Auto-compaction
+          </legend>
+          <p className="mb-3 text-xs text-slate-500">
+            When the conversation history exceeds the threshold, older messages
+            are automatically summarized into a single system note so the chat
+            can keep going without overflowing the model's context window.
+          </p>
+
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={settings.autoCompact.enabled}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  autoCompact: { ...settings.autoCompact, enabled: e.target.checked },
+                })
+              }
+            />
+            <span className="text-sm">Enable auto-compaction</span>
+          </label>
+
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="block text-xs font-medium text-slate-600">
+                Model context window (tokens)
+              </span>
+              <input
+                type="number"
+                min={2000}
+                max={2_000_000}
+                step={1000}
+                value={settings.autoCompact.modelContextWindow}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    autoCompact: {
+                      ...settings.autoCompact,
+                      modelContextWindow: Math.max(2000, Number(e.target.value) || 2000),
+                    },
+                  })
+                }
+                className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 font-mono text-sm"
+              />
+              <span className="mt-1 block text-[10px] text-slate-500">
+                gpt-4o = 128000 · gpt-3.5 = 16000
+              </span>
+            </label>
+
+            <label className="block">
+              <span className="block text-xs font-medium text-slate-600">
+                Threshold (% of context)
+              </span>
+              <input
+                type="number"
+                min={10}
+                max={95}
+                step={5}
+                value={settings.autoCompact.thresholdPercent}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    autoCompact: {
+                      ...settings.autoCompact,
+                      thresholdPercent: Math.min(95, Math.max(10, Number(e.target.value) || 75)),
+                    },
+                  })
+                }
+                className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 font-mono text-sm"
+              />
+              <span className="mt-1 block text-[10px] text-slate-500">
+                Triggers at{' '}
+                {Math.floor(
+                  (settings.autoCompact.modelContextWindow *
+                    settings.autoCompact.thresholdPercent) /
+                    100,
+                ).toLocaleString()}{' '}
+                tokens
+              </span>
+            </label>
+
+            <label className="block">
+              <span className="block text-xs font-medium text-slate-600">
+                Keep recent messages
+              </span>
+              <input
+                type="number"
+                min={2}
+                max={50}
+                step={1}
+                value={settings.autoCompact.keepRecentMessages}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    autoCompact: {
+                      ...settings.autoCompact,
+                      keepRecentMessages: Math.min(50, Math.max(2, Number(e.target.value) || 6)),
+                    },
+                  })
+                }
+                className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 font-mono text-sm"
+              />
+              <span className="mt-1 block text-[10px] text-slate-500">
+                Last N messages stay verbatim
+              </span>
+            </label>
+          </div>
+        </fieldset>
+
         <div className="flex items-center gap-3">
           <button
             type="submit"

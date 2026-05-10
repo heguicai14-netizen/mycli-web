@@ -9,7 +9,7 @@ export interface MessageRecord {
 
 export interface AppendMessageInput {
   conversationId: string
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'system-synth'
   content: string
   pending?: boolean
 }
@@ -24,4 +24,10 @@ export interface MessageStoreAdapter {
   append(msg: AppendMessageInput): Promise<AppendedMessage>
   list(conversationId: string): Promise<MessageRecord[]>
   update(id: string, patch: { content?: string; pending?: boolean }): Promise<void>
+  /**
+   * Mark messages as compacted (excluded from future LLM history). Optional —
+   * stores that don't implement this opt out of auto-compaction. Implementations
+   * should be idempotent: marking an already-compacted message is a no-op.
+   */
+  markCompacted?(ids: string[]): Promise<void>
 }

@@ -154,6 +154,27 @@ describe('agentService.runTurn', () => {
     ])
   })
 
+  it('forwards core usage events as wire message/usage tied to assistant msg', async () => {
+    const { deps, events } = makeDeps({
+      agentEvents: [
+        { kind: 'message/streamChunk', delta: 'hi' },
+        { kind: 'usage', input: 42, output: 7 } as any,
+        { kind: 'done', stopReason: 'end_turn', assistantText: 'hi' },
+      ],
+    })
+    const svc = createAgentService(deps as any)
+    await svc.runTurn({ sessionId: 's1', text: 'hi' })
+
+    const usage = events.find((e) => e.kind === 'message/usage')
+    expect(usage).toBeDefined()
+    expect(usage.input).toBe(42)
+    expect(usage.output).toBe(7)
+    // Anchored on the assistant placeholder. Mock id sequence: msg-1 (user
+    // append), msg-2 slot consumed by list(), msg-3 (assistant placeholder).
+    expect(usage.messageId).toBe('msg-3')
+    expect(usage.sessionId).toBe('s1')
+  })
+
   it('tools allowlist filters the tool set passed to createAgent', async () => {
     const fakeTool = (name: string): ToolDefinition<any, any, any> =>
       ({ name, description: '', inputSchema: {}, execute: async () => ({ ok: true, data: {} }) }) as any
@@ -301,6 +322,170 @@ describe('agentService.runTurn', () => {
 
     expect(typeof cancelFn).toBe('function')
     expect(fake.cancelled.value).toBe(true)
+  })
+
+  // ---------- Auto-compaction ----------
+
+  function compactionScenario(opts: {
+    enabled?: boolean
+    history: Array<{ id: string; role: string; content: string; compacted?: boolean }>
+    threshold?: number
+    keep?: number
+    summary?: string
+    compactThrows?: Error
+    ephemeral?: boolean
+  }) {
+    const events: any[] = []
+    const compacted: string[][] = []
+    const appended: any[] = []
+    const ac = opts.enabled === false
+      ? undefined
+      : {
+          enabled: true,
+          modelContextWindow: 1000,
+          thresholdPercent: opts.threshold ?? 50, // default threshold = 500 chars/4≈125 toks
+          keepRecentMessages: opts.keep ?? 2,
+        }
+    const settings = defaultSettings({ autoCompact: ac })
+    // Stateful mock: list() reflects markCompacted (filters out) and append()
+    // (adds new rows). This matches real IDB behavior and lets the test verify
+    // that compaction shrinks the rebuilt history.
+    const live = opts.history.map((h) => ({ ...h, compacted: !!h.compacted }))
+    const compactedSet = new Set<string>()
+    const messageStore = {
+      append: vi.fn(async (msg: any) => {
+        appended.push(msg)
+        const id = `new-${appended.length}`
+        live.push({ id, role: msg.role, content: msg.content, compacted: false } as any)
+        return { id, createdAt: 9000 + appended.length }
+      }),
+      list: vi.fn(async () =>
+        live.map((m) => ({ ...m, compacted: m.compacted || compactedSet.has(m.id) })),
+      ),
+      update: vi.fn(async () => {}),
+      activeConversationId: vi.fn(async () => 'conv-1'),
+      markCompacted: vi.fn(async (ids: string[]) => {
+        compacted.push(ids)
+        for (const id of ids) compactedSet.add(id)
+      }),
+    }
+    const fake = makeFakeAgent([
+      { kind: 'message/streamChunk', delta: 'ok' },
+      { kind: 'done', stopReason: 'end_turn', assistantText: 'ok' },
+    ])
+    const compact = vi.fn(async () => {
+      if (opts.compactThrows) throw opts.compactThrows
+      return opts.summary ?? 'Goals: do stuff. Facts: x=1. Open: none.'
+    })
+    const deps = {
+      settings: { load: async () => settings },
+      emit: (ev: any) => events.push(ev),
+      messageStore,
+      toolContext: {
+        build: async () => ({
+          rpc: { domOp: vi.fn(), chromeApi: vi.fn() },
+          tabId: 99,
+          conversationId: 'conv-1',
+        }),
+      },
+      createAgent: () => fake.session as any,
+      compact,
+    } as any
+    const svc = createAgentService(deps)
+    return { svc, events, compact, messageStore, appended, compacted }
+  }
+
+  // Build a long history that easily exceeds threshold = 500 (1000 * 50% = 500 toks ≈ 2000 chars)
+  const longContent = 'lorem ipsum dolor sit amet '.repeat(200) // ~5400 chars > 1350 toks
+  const longHistory = [
+    { id: 'h1', role: 'user', content: longContent },
+    { id: 'h2', role: 'assistant', content: longContent },
+    { id: 'h3', role: 'user', content: 'recent question one' },
+    { id: 'h4', role: 'assistant', content: 'recent answer one' },
+  ]
+
+  it('triggers compaction when prior history exceeds threshold', async () => {
+    const { svc, events, compact, messageStore } = compactionScenario({
+      history: longHistory,
+    })
+    await svc.runTurn({ sessionId: 's1', text: 'next question' })
+
+    const started = events.find((e) => e.kind === 'compact/started')
+    const completed = events.find((e) => e.kind === 'compact/completed')
+    expect(started).toBeDefined()
+    expect(completed).toBeDefined()
+    expect(started.threshold).toBe(500)
+    expect(started.messagesToCompact).toBe(2) // 4 - keep(2) = 2 head
+    expect(compact).toHaveBeenCalledTimes(1)
+    expect(messageStore.markCompacted).toHaveBeenCalledWith(['h1', 'h2'])
+    expect(completed.summaryMessageId).toBeDefined()
+    expect(completed.afterTokens).toBeLessThan(completed.beforeTokens)
+  })
+
+  it('skips compaction when threshold not exceeded', async () => {
+    const shortHistory = [
+      { id: 'h1', role: 'user', content: 'hi' },
+      { id: 'h2', role: 'assistant', content: 'hello' },
+      { id: 'h3', role: 'user', content: 'how are you' },
+      { id: 'h4', role: 'assistant', content: 'fine' },
+    ]
+    const { svc, events, compact, messageStore } = compactionScenario({
+      history: shortHistory,
+    })
+    await svc.runTurn({ sessionId: 's1', text: 'ok' })
+
+    expect(compact).not.toHaveBeenCalled()
+    expect(messageStore.markCompacted).not.toHaveBeenCalled()
+    expect(events.find((e) => e.kind === 'compact/started')).toBeUndefined()
+  })
+
+  it('skips compaction when autoCompact is disabled', async () => {
+    const { svc, events, compact } = compactionScenario({
+      enabled: false,
+      history: longHistory,
+    })
+    await svc.runTurn({ sessionId: 's1', text: 'q' })
+    expect(compact).not.toHaveBeenCalled()
+    expect(events.find((e) => e.kind === 'compact/started')).toBeUndefined()
+  })
+
+  it('skips compaction for ephemeral turns', async () => {
+    const { svc, events, compact } = compactionScenario({
+      history: longHistory,
+    })
+    await svc.runTurn({ sessionId: 's1', text: 'q', ephemeral: true })
+    expect(compact).not.toHaveBeenCalled()
+    expect(events.find((e) => e.kind === 'compact/started')).toBeUndefined()
+  })
+
+  it('emits compact/failed and continues with full history when compactor throws', async () => {
+    const { svc, events, compact, messageStore } = compactionScenario({
+      history: longHistory,
+      compactThrows: new Error('rate_limit'),
+    })
+    await svc.runTurn({ sessionId: 's1', text: 'q' })
+
+    const failed = events.find((e) => e.kind === 'compact/failed')
+    expect(failed).toBeDefined()
+    expect(failed.reason).toBe('rate_limit')
+    expect(messageStore.markCompacted).not.toHaveBeenCalled()
+    // The agent stream still ran (assistant message was emitted at end)
+    expect(events.some((e) => e.kind === 'message/streamChunk')).toBe(true)
+    expect(compact).toHaveBeenCalledTimes(1)
+  })
+
+  it('emits message/appended for the system-synth summary so UI can display it', async () => {
+    const { svc, events } = compactionScenario({
+      history: longHistory,
+      summary: 'Goals: X. Facts: Y. Open: Z.',
+    })
+    await svc.runTurn({ sessionId: 's1', text: 'q' })
+
+    const synthMsgEv = events
+      .filter((e) => e.kind === 'message/appended')
+      .find((e) => e.message.role === 'system-synth')
+    expect(synthMsgEv).toBeDefined()
+    expect(synthMsgEv.message.content).toBe('Goals: X. Facts: Y. Open: Z.')
   })
 
   it('emits engine_error fatalError when the agent stream throws', async () => {

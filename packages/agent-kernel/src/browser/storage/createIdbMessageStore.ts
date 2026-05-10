@@ -2,6 +2,7 @@ import {
   appendMessage,
   listMessagesByConversation,
   updateMessage,
+  markMessagesCompacted,
 } from './messages'
 import {
   createConversation,
@@ -50,6 +51,9 @@ export function createIdbMessageStore(
     },
     async update(id, patch) {
       await updateMessage(id, patch)
+    },
+    async markCompacted(ids) {
+      await markMessagesCompacted(ids)
     },
   }
 }

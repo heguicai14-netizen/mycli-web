@@ -40,11 +40,47 @@ const FatalError = z.object({
   message: z.string(),
 })
 
+// Per-iteration token usage from the LLM. Emitted once per assistant turn that
+// reports a usage object (some endpoints omit it). Cumulative aggregation is
+// the consumer's responsibility — the kernel only forwards what the client
+// observed in this iteration.
+const Usage = z.object({
+  kind: z.literal('usage'),
+  input: z.number().int().nonnegative(),
+  output: z.number().int().nonnegative(),
+})
+
+// Auto-compaction lifecycle. Emitted by the orchestrator (not QueryEngine) when
+// the history exceeds the configured threshold and a summarization pass starts /
+// finishes. UI consumers use these to render a "Compacting…" status banner.
+const CompactStarted = z.object({
+  kind: z.literal('compact/started'),
+  messagesToCompact: z.number().int().nonnegative(),
+  estimatedTokens: z.number().int().nonnegative(),
+  threshold: z.number().int().nonnegative(),
+})
+
+const CompactCompleted = z.object({
+  kind: z.literal('compact/completed'),
+  messagesCompacted: z.number().int().nonnegative(),
+  beforeTokens: z.number().int().nonnegative(),
+  afterTokens: z.number().int().nonnegative(),
+})
+
+const CompactFailed = z.object({
+  kind: z.literal('compact/failed'),
+  reason: z.string(),
+})
+
 export const AgentEvent = z.discriminatedUnion('kind', [
   StreamChunk,
   ToolStart,
   ToolEnd,
   Done,
   FatalError,
+  Usage,
+  CompactStarted,
+  CompactCompleted,
+  CompactFailed,
 ])
 export type AgentEvent = z.infer<typeof AgentEvent>

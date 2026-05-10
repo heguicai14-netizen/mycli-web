@@ -104,6 +104,37 @@ const MessageStreamChunk = Base.extend({
   delta: z.string(),
 })
 
+// Per-iteration LLM token usage tied to the assistant message currently being
+// built. UI consumers accumulate across events for a turn-level total.
+const MessageUsage = Base.extend({
+  kind: z.literal('message/usage'),
+  messageId: Uuid,
+  input: z.number().int().nonnegative(),
+  output: z.number().int().nonnegative(),
+})
+
+// Auto-compaction wire events. Emitted by agentService when the conversation
+// history exceeds the configured threshold and a summarization is in flight.
+const CompactStarted = Base.extend({
+  kind: z.literal('compact/started'),
+  messagesToCompact: z.number().int().nonnegative(),
+  estimatedTokens: z.number().int().nonnegative(),
+  threshold: z.number().int().nonnegative(),
+})
+
+const CompactCompleted = Base.extend({
+  kind: z.literal('compact/completed'),
+  messagesCompacted: z.number().int().nonnegative(),
+  beforeTokens: z.number().int().nonnegative(),
+  afterTokens: z.number().int().nonnegative(),
+  summaryMessageId: Uuid,
+})
+
+const CompactFailed = Base.extend({
+  kind: z.literal('compact/failed'),
+  reason: z.string(),
+})
+
 const ToolStart = Base.extend({
   kind: z.literal('tool/start'),
   toolCall: z.object({
@@ -184,6 +215,7 @@ const RuntimeError = Base.extend({
 export const AgentEvent = z.discriminatedUnion('kind', [
   MessageAppended,
   MessageStreamChunk,
+  MessageUsage,
   ToolStart,
   ToolEnd,
   SubAgentSpawned,
@@ -194,6 +226,9 @@ export const AgentEvent = z.discriminatedUnion('kind', [
   CommandAck,
   FatalError,
   RuntimeError,
+  CompactStarted,
+  CompactCompleted,
+  CompactFailed,
 ])
 export type AgentEvent = z.infer<typeof AgentEvent>
 

@@ -68,6 +68,10 @@ export class AgentSession<ExtraCtx = Record<string, never>> {
       if (ev.kind === 'assistant_delta') {
         assistantText += ev.text
         yield { kind: 'message/streamChunk', delta: ev.text }
+      } else if (ev.kind === 'assistant_message_complete') {
+        if (ev.usage) {
+          yield { kind: 'usage', input: ev.usage.in, output: ev.usage.out }
+        }
       } else if (ev.kind === 'tool_executing') {
         yield {
           kind: 'tool/start',
