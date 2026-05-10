@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { resetDbForTests } from '@ext/storage/db'
-import { createConversation } from '@ext/storage/conversations'
 import {
+  resetDbForTests,
+  createConversation,
   appendMessage,
   listMessagesByConversation,
   markMessagesCompacted,
   updateMessage,
   deleteMessagesByConversation,
-} from '@ext/storage/messages'
+} from 'agent-kernel'
 
 describe('messages store', () => {
   beforeEach(async () => {

@@ -1,7 +1,7 @@
 import { openDB, deleteDB, type IDBPDatabase, type DBSchema } from 'idb'
-import type { ConversationId, MessageId, SkillId } from 'agent-kernel'
+import type { ConversationId, MessageId, SkillId } from '../../core/types'
 
-export const DB_NAME = 'mycli-web'
+export const DB_NAME = 'agent-kernel'
 export const DB_VERSION = 1
 
 export interface ConversationRow {

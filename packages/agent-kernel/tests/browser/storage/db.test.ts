@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { openDb, DB_NAME, DB_VERSION, resetDbForTests } from '@ext/storage/db'
+import { openDb, DB_NAME, DB_VERSION, resetDbForTests } from 'agent-kernel'
 
 describe('openDb', () => {
   beforeEach(async () => {
@@ -29,7 +29,7 @@ describe('openDb', () => {
     db2.close()
   })
 
-  it('DB_NAME is mycli-web', () => {
-    expect(DB_NAME).toBe('mycli-web')
+  it('DB_NAME is agent-kernel', () => {
+    expect(DB_NAME).toBe('agent-kernel')
   })
 })

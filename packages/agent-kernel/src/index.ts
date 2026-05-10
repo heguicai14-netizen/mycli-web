@@ -70,3 +70,37 @@ export {
 export { sendDomOp, callChromeApi } from './browser/domOpClient'
 export { installDomOpRouter } from './browser/domOpRouter'
 export { polyfillChromeApiInOffscreen } from './browser/offscreenChromePolyfill'
+
+// === browser storage (default IDB-backed conversation/message/audit stores) ===
+export {
+  openDb,
+  resetDbForTests,
+  DB_NAME,
+  DB_VERSION,
+  type ConversationRow,
+  type MessageRow,
+  type SkillRow,
+  type SkillDataRow,
+  type AuditLogRow,
+  type MycliWebSchema,
+} from './browser/storage/db'
+export {
+  createConversation,
+  getConversation,
+  listConversations,
+  updateConversation,
+  deleteConversation,
+} from './browser/storage/conversations'
+export {
+  appendMessage,
+  listMessagesByConversation,
+  updateMessage,
+  markMessagesCompacted,
+  deleteMessagesByConversation,
+} from './browser/storage/messages'
+export {
+  appendAudit,
+  listAuditByConversation,
+  listAuditByTimeRange,
+  pruneAuditOlderThan,
+} from './browser/storage/auditLog'

@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { resetDbForTests } from '@ext/storage/db'
 import {
+  resetDbForTests,
   appendAudit,
   listAuditByConversation,
   listAuditByTimeRange,
   pruneAuditOlderThan,
-} from '@ext/storage/auditLog'
+} from 'agent-kernel'
 
 describe('auditLog store', () => {
   beforeEach(async () => {

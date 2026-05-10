@@ -9,20 +9,16 @@ import {
   sendDomOp,
   callChromeApi,
   fetchGetTool,
+  createConversation,
+  getConversation,
+  listConversations,
+  appendMessage,
+  listMessagesByConversation,
+  updateMessage,
 } from 'agent-kernel'
 import { extensionTools, type ExtensionToolCtx, type ExtensionToolRpc } from '@ext-tools'
 import { useSkillTool, readSkillFileTool } from '@ext-skills'
 import { loadSettings } from './storage/settings'
-import {
-  createConversation,
-  getConversation,
-  listConversations,
-} from './storage/conversations'
-import {
-  appendMessage,
-  listMessagesByConversation,
-  updateMessage,
-} from './storage/messages'
 
 console.log('[mycli-web] offscreen agent runtime booted at', new Date().toISOString())
 
