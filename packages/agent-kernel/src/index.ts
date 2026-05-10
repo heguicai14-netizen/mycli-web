@@ -31,8 +31,8 @@ export type {
   ContentPart,
 } from './core/types'
 
-// === skills (re-exported from current core/index.ts, will move to ./skills in Task 4) ===
-export { parseSkillMd, type SkillDefinition, type ParsedSkillMd } from './core/Skill'
-export { SkillRegistry } from './core/SkillRegistry'
-export { createUseSkillTool } from './core/useSkillTool'
-export { createReadSkillFileTool } from './core/readSkillFileTool'
+// === skills 协议 ===
+export { parseSkillMd, type SkillDefinition, type ParsedSkillMd } from './skills/Skill'
+export { SkillRegistry } from './skills/SkillRegistry'
+export { createUseSkillTool } from './skills/useSkillTool'
+export { createReadSkillFileTool } from './skills/readSkillFileTool'

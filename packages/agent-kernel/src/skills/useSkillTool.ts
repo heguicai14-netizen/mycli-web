@@ -1,5 +1,5 @@
-import type { ToolDefinition } from './types'
-import { makeError, makeOk } from './Tool'
+import type { ToolDefinition } from '../core/types'
+import { makeError, makeOk } from '../core/Tool'
 import type { SkillRegistry } from './SkillRegistry'
 
 export interface UseSkillInput {
