@@ -7,14 +7,19 @@ import { task as getBySelector }    from './L1-basic/get-by-selector.task'
 import { task as fetchJson }        from './L1-basic/fetch-json.task'
 import { task as screenshot }       from './L1-basic/screenshot-describe.task'
 
-import { task as issueSummary }     from './L2-chain/issue-summary.task'
-import { task as crossTabCompare }  from './L2-chain/cross-tab-compare.task'
-import { task as fetchThenExtract } from './L2-chain/fetch-then-extract.task'
-import { task as conditionalBranch }from './L2-chain/conditional-branch.task'
+import { task as issueSummary }        from './L2-chain/issue-summary.task'
+import { task as crossTabCompare }     from './L2-chain/cross-tab-compare.task'
+import { task as fetchThenExtract }    from './L2-chain/fetch-then-extract.task'
+import { task as conditionalBranch }   from './L2-chain/conditional-branch.task'
+import { task as multiStepExtract }    from './L2-chain/multi-step-extract.task'
+import { task as failThenFallback }    from './L2-chain/fail-then-fallback.task'
+import { task as expTreatmentReadout } from './L2-chain/exp-treatment-readout.task'
+import { task as expCrossValidate }    from './L2-chain/exp-cross-validate.task'
 
 export const builtinSuite: Suite = [
   extractTitle, extractSelection, listTabs,
   getBySelector, fetchJson, screenshot,
   issueSummary, crossTabCompare, fetchThenExtract, conditionalBranch,
-  // remaining L2 in T20, L3 in T21
+  multiStepExtract, failThenFallback, expTreatmentReadout, expCrossValidate,
+  // L3 in T21
 ]
