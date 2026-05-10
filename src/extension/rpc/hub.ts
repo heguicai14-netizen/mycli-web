@@ -14,7 +14,11 @@ interface Session {
   sessionId: string
 }
 
-export function installHub(options: HubOptions = { mode: 'echo' }) {
+export interface HubHandle {
+  broadcastRuntimeError: (message: string, stack?: string) => void
+}
+
+export function installHub(options: HubOptions = { mode: 'echo' }): HubHandle {
   const offscreenPortName = options.offscreenPortName ?? DEFAULT_OFFSCREEN_PORT
   const sessionsByPort = new Map<chrome.runtime.Port, Session>()
   const sessionsById = new Map<string, Session>()
@@ -50,12 +54,35 @@ export function installHub(options: HubOptions = { mode: 'echo' }) {
       return
     }
     const ev = parsed.data
+    if (ev.kind === 'runtime/error') {
+      // Runtime errors are runtime-wide, not session-scoped — fan out to every
+      // active client port so any open F12 can see them.
+      console.error('[mycli-web/hub] runtime error from', ev.source, ev.message)
+      for (const [, session] of sessionsByPort) session.port.postMessage(ev)
+      return
+    }
     const session = sessionsById.get(ev.sessionId)
     if (session) {
       session.port.postMessage(ev)
     } else {
       console.warn('[mycli-web/hub] no client session for sessionId', ev.sessionId, 'event', ev.kind)
     }
+  }
+
+  // SW-side errors don't pass through the offscreen port; background.ts calls
+  // this directly to fan them out the same way as offscreen errors.
+  function broadcastRuntimeError(message: string, stack?: string): void {
+    const ev = {
+      id: crypto.randomUUID(),
+      sessionId: UNKNOWN_SESSION_ID,
+      ts: Date.now(),
+      kind: 'runtime/error' as const,
+      source: 'sw' as const,
+      message,
+      stack,
+    }
+    console.error('[mycli-web/hub] runtime error from sw:', message)
+    for (const [, session] of sessionsByPort) session.port.postMessage(ev)
   }
 
   function forwardClientCmdToOffscreen(cmd: unknown) {
@@ -109,6 +136,8 @@ export function installHub(options: HubOptions = { mode: 'echo' }) {
       if (session.sessionId) sessionsById.delete(session.sessionId)
     })
   })
+
+  return { broadcastRuntimeError }
 }
 
 function ack(correlationId: string, sessionId: string): AgentEvent {

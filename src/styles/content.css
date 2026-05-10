@@ -7,3 +7,81 @@
   all: initial;
   font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
+
+/* Markdown rendering inside chat bubbles. Styled inline because we don't
+   ship @tailwindcss/typography and the bubble is the only place these run. */
+.markdown-body > :first-child { margin-top: 0; }
+.markdown-body > :last-child { margin-bottom: 0; }
+.markdown-body p { margin: 0.4em 0; line-height: 1.5; }
+.markdown-body h1 { font-size: 1.2em; font-weight: 600; margin: 0.6em 0 0.3em; }
+.markdown-body h2 { font-size: 1.1em; font-weight: 600; margin: 0.6em 0 0.3em; }
+.markdown-body h3 { font-size: 1.05em; font-weight: 600; margin: 0.5em 0 0.25em; }
+.markdown-body h4, .markdown-body h5, .markdown-body h6 { font-weight: 600; margin: 0.4em 0 0.2em; }
+.markdown-body ul, .markdown-body ol { margin: 0.4em 0; padding-left: 1.4em; }
+.markdown-body ul { list-style: disc; }
+.markdown-body ol { list-style: decimal; }
+.markdown-body li { margin: 0.15em 0; }
+.markdown-body li > p { margin: 0.15em 0; }
+.markdown-body blockquote {
+  border-left: 3px solid currentColor;
+  opacity: 0.85;
+  padding-left: 0.7em;
+  margin: 0.4em 0;
+}
+.markdown-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  background: rgba(0, 0, 0, 0.08);
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+}
+.markdown-body pre {
+  background: rgba(0, 0, 0, 0.08);
+  padding: 0.6em 0.8em;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+  font-size: 0.85em;
+}
+.markdown-body pre code {
+  background: transparent;
+  padding: 0;
+  font-size: 1em;
+}
+.markdown-body a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.markdown-body table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  font-size: 0.9em;
+}
+.markdown-body th, .markdown-body td {
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  padding: 0.3em 0.6em;
+  text-align: left;
+}
+.markdown-body th {
+  background: rgba(0, 0, 0, 0.05);
+  font-weight: 600;
+}
+.markdown-body hr {
+  border: 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.15);
+  margin: 0.6em 0;
+}
+/* Slightly soften code-block contrast on the user (blue) bubble. */
+.bg-blue-600 .markdown-body code,
+.bg-blue-600 .markdown-body pre {
+  background: rgba(255, 255, 255, 0.18);
+}
+.bg-blue-600 .markdown-body th {
+  background: rgba(255, 255, 255, 0.15);
+}
+.bg-blue-600 .markdown-body th,
+.bg-blue-600 .markdown-body td,
+.bg-blue-600 .markdown-body hr {
+  border-color: rgba(255, 255, 255, 0.3);
+}

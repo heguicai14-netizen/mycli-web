@@ -1,8 +1,10 @@
+// IMPORTANT: polyfill must run before any module touches chrome.storage /
+// chrome.tabs. Other imports below are side-effect-free at module level.
+import { polyfillChromeApiInOffscreen } from './offscreenChromePolyfill'
+polyfillChromeApiInOffscreen()
+
 import { ClientCmd } from './rpc/protocol'
-import { createAgent, type AgentEvent } from '@core'
-import type { ChatMessage } from '@core'
-import { fetchGetTool } from '@core/tools/fetchGet'
-import { extensionTools, type ExtensionToolCtx, type ExtensionToolRpc } from '@ext-tools'
+import type { ExtensionToolCtx, ExtensionToolRpc } from '@ext-tools'
 import { loadSettings } from './storage/settings'
 import {
   createConversation,
@@ -14,17 +16,28 @@ import {
   listMessagesByConversation,
   updateMessage,
 } from './storage/messages'
+import { sendDomOp, callChromeApi } from './domOpClient'
+import { createAgentService } from './agentService'
 
 console.log('[mycli-web] offscreen agent runtime booted at', new Date().toISOString())
 
+// Sentinel sessionId for runtime-wide events that don't belong to any chat session.
+const SENTINEL_SESSION_ID = '00000000-0000-4000-8000-000000000000'
+
 let swPort: chrome.runtime.Port | null = null
 const activeAborts = new Map<string, { abort: () => void }>()
+
+// Holds runtime/error events that fired before the SW port came up.
+const pendingRuntimeErrors: any[] = []
 
 // SW will connect to us via chrome.runtime.connect({ name: 'sw-to-offscreen' }).
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== 'sw-to-offscreen') return
   console.log('[mycli-web/offscreen] SW connected')
   swPort = port
+  // Drain any runtime errors that occurred before the SW connected — they
+  // need to reach content tabs for F12 visibility.
+  while (pendingRuntimeErrors.length) port.postMessage(pendingRuntimeErrors.shift())
   port.onMessage.addListener((raw) => handleClientCmd(raw))
   port.onDisconnect.addListener(() => {
     console.warn('[mycli-web/offscreen] SW disconnected')
@@ -37,6 +50,36 @@ chrome.runtime.onConnect.addListener((port) => {
 function emit(ev: any) {
   swPort?.postMessage(ev)
 }
+
+function reportOffscreenRuntimeError(message: string, stack?: string) {
+  const ev = {
+    id: crypto.randomUUID(),
+    sessionId: SENTINEL_SESSION_ID,
+    ts: Date.now(),
+    kind: 'runtime/error' as const,
+    source: 'offscreen' as const,
+    message,
+    stack,
+  }
+  console.error('[mycli-web/offscreen] runtime error:', message, stack ?? '')
+  if (swPort) swPort.postMessage(ev)
+  else pendingRuntimeErrors.push(ev)
+}
+
+self.addEventListener('error', (e: ErrorEvent) => {
+  reportOffscreenRuntimeError(
+    e.message || 'uncaught error',
+    e.error?.stack,
+  )
+})
+self.addEventListener('unhandledrejection', (e: PromiseRejectionEvent) => {
+  const reason = e.reason as any
+  const message =
+    typeof reason === 'string'
+      ? reason
+      : reason?.message ?? 'unhandled rejection'
+  reportOffscreenRuntimeError(message, reason?.stack)
+})
 
 async function handleClientCmd(raw: unknown) {
   const parsed = ClientCmd.safeParse(raw)
@@ -96,169 +139,37 @@ async function pushSnapshot(sessionId: string, conversationId?: string) {
   })
 }
 
-async function runChat(cmd: { sessionId: string; text: string }) {
-  console.log('[mycli-web/offscreen] runChat start, text:', cmd.text)
-  const settings = await loadSettings()
-  console.log(
-    '[mycli-web/offscreen] settings loaded; apiKey set:',
-    !!settings.apiKey,
-    'baseUrl:',
-    settings.baseUrl,
-    'model:',
-    settings.model,
-  )
-  if (!settings.apiKey) {
-    console.warn('[mycli-web/offscreen] no apiKey — emitting fatalError')
-    emit({
-      id: crypto.randomUUID(),
-      sessionId: cmd.sessionId,
-      ts: Date.now(),
-      kind: 'fatalError',
-      code: 'no_api_key',
-      message: 'Configure API key in extension options first.',
-    })
-    return
-  }
-
-  const cid = await activeConversationId()
-  const userMsg = await appendMessage({
-    conversationId: cid,
-    role: 'user',
-    content: cmd.text,
-  })
-  emit({
-    id: crypto.randomUUID(),
-    sessionId: cmd.sessionId,
-    ts: Date.now(),
-    kind: 'message/appended',
-    message: {
-      id: userMsg.id,
-      role: 'user',
-      content: cmd.text,
-      createdAt: userMsg.createdAt,
-    },
-  })
-
-  // Load prior conversation history (everything except the just-appended user
-  // message) so the LLM retains context from previous turns.
-  const allHistory = await listMessagesByConversation(cid)
-  const priorHistory: ChatMessage[] = allHistory
-    .filter((m) => !m.compacted)
-    .filter((m) => m.id !== userMsg.id)
-    .map((m) => ({
-      role:
-        m.role === 'system-synth' ? 'system' : (m.role as ChatMessage['role']),
-      content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-    }))
-
-  // ToolExecContext fields shared by all tools (chrome backend).
+async function buildToolContext(cid: string | undefined): Promise<ExtensionToolCtx> {
   const tabId = (await guessActiveTab())?.id
   const rpc: ExtensionToolRpc = {
     domOp: (op, timeoutMs = 30_000) => sendDomOp(op, timeoutMs),
     chromeApi: (method, args) => callChromeApi(method, args),
   }
-  const toolContext: ExtensionToolCtx = {
-    rpc,
-    tabId,
-    conversationId: cid,
-  }
+  return { rpc, tabId, conversationId: cid }
+}
 
-  const agent = createAgent({
-    llm: { apiKey: settings.apiKey, baseUrl: settings.baseUrl, model: settings.model },
-    tools: [fetchGetTool, ...extensionTools],
-    toolContext,
-    toolMaxIterations: settings.toolMaxIterations,
-    systemPrompt: settings.systemPromptAddendum || undefined,
+const agentService = createAgentService({
+  loadSettings,
+  emit,
+  appendMessage,
+  listMessagesByConversation,
+  updateMessage,
+  activeConversationId,
+  buildToolContext,
+})
+
+async function runChat(cmd: {
+  sessionId: string
+  text: string
+  system?: string
+  tools?: string[]
+  model?: string
+  ephemeral?: boolean
+}) {
+  await agentService.runTurn(cmd, (cancel) => {
+    activeAborts.set(cmd.sessionId, { abort: cancel })
   })
-
-  // Track this session's agent so chat/cancel can abort it.
-  activeAborts.set(cmd.sessionId, { abort: () => agent.cancel() })
-
-  const assistantMsg = await appendMessage({
-    conversationId: cid,
-    role: 'assistant',
-    content: '',
-    pending: true,
-  })
-
-  // Emit a wire 'message/appended' for the empty pending assistant placeholder so the UI
-  // can anchor tool/start cards to a known message id even when the model decides to call
-  // a tool before producing any assistant text. pending: true tells the UI this is a
-  // placeholder and busy state should be preserved until the final 'done' append.
-  emit({
-    id: crypto.randomUUID(),
-    sessionId: cmd.sessionId,
-    ts: Date.now(),
-    kind: 'message/appended',
-    message: {
-      id: assistantMsg.id,
-      role: 'assistant',
-      content: '',
-      createdAt: assistantMsg.createdAt,
-      pending: true,
-    },
-  })
-
-  try {
-    for await (const ev of agent.send(cmd.text, { history: priorHistory }) as AsyncIterable<AgentEvent>) {
-      if (ev.kind === 'message/streamChunk') {
-        emit({
-          id: crypto.randomUUID(),
-          sessionId: cmd.sessionId,
-          ts: Date.now(),
-          kind: 'message/streamChunk',
-          messageId: assistantMsg.id,
-          delta: ev.delta,
-        })
-      } else if (ev.kind === 'tool/start') {
-        emit({
-          id: crypto.randomUUID(),
-          sessionId: cmd.sessionId,
-          ts: Date.now(),
-          kind: 'tool/start',
-          toolCall: ev.toolCall,
-        })
-      } else if (ev.kind === 'tool/end') {
-        emit({
-          id: crypto.randomUUID(),
-          sessionId: cmd.sessionId,
-          ts: Date.now(),
-          kind: 'tool/end',
-          toolCallId: ev.toolCallId,
-          result: ev.result,
-        })
-      } else if (ev.kind === 'done') {
-        await updateMessage(assistantMsg.id, {
-          content: ev.assistantText,
-          pending: false,
-        })
-        emit({
-          id: crypto.randomUUID(),
-          sessionId: cmd.sessionId,
-          ts: Date.now(),
-          kind: 'message/appended',
-          message: {
-            id: assistantMsg.id,
-            role: 'assistant',
-            content: ev.assistantText,
-            createdAt: assistantMsg.createdAt,
-            pending: false,
-          },
-        })
-      }
-    }
-  } catch (e: any) {
-    emit({
-      id: crypto.randomUUID(),
-      sessionId: cmd.sessionId,
-      ts: Date.now(),
-      kind: 'fatalError',
-      code: 'engine_error',
-      message: e?.message ?? String(e),
-    })
-  } finally {
-    activeAborts.delete(cmd.sessionId)
-  }
+  activeAborts.delete(cmd.sessionId)
 }
 
 async function guessActiveTab(): Promise<chrome.tabs.Tab | undefined> {
@@ -270,39 +181,3 @@ async function guessActiveTab(): Promise<chrome.tabs.Tab | undefined> {
   }
 }
 
-async function sendDomOp(op: any, timeoutMs: number) {
-  return new Promise<any>((resolve) => {
-    const id = crypto.randomUUID()
-    const timer = setTimeout(
-      () =>
-        resolve({
-          ok: false,
-          error: { code: 'dom_op_timeout', message: 'no response', retryable: false },
-        }),
-      timeoutMs,
-    )
-    const listener = (msg: any) => {
-      if (msg?.kind === 'dom_op_result' && msg.id === id) {
-        chrome.runtime.onMessage.removeListener(listener)
-        clearTimeout(timer)
-        resolve(msg.result)
-      }
-    }
-    chrome.runtime.onMessage.addListener(listener)
-    chrome.runtime.sendMessage({ kind: 'dom_op_request', id, op })
-  })
-}
-
-async function callChromeApi(method: string, args: unknown[]): Promise<any> {
-  return new Promise((resolve) => {
-    const id = crypto.randomUUID()
-    const listener = (msg: any) => {
-      if (msg?.kind === 'chrome_api_result' && msg.id === id) {
-        chrome.runtime.onMessage.removeListener(listener)
-        resolve(msg.result)
-      }
-    }
-    chrome.runtime.onMessage.addListener(listener)
-    chrome.runtime.sendMessage({ kind: 'chrome_api_request', id, method, args })
-  })
-}

@@ -14,6 +14,15 @@ const ChatSend = Base.extend({
   kind: z.literal('chat/send'),
   text: z.string().min(1),
   attachments: z.array(z.unknown()).optional(),
+  // Per-request overrides — undefined means "fall back to extension settings".
+  // `tools` is a name allowlist; e.g. ['readPage'] runs the agent with only
+  // that tool exposed to the LLM. `ephemeral` skips IndexedDB persistence so
+  // the call doesn't pollute conversation history (intended for one-shot
+  // consumers like a right-click menu or a settings test button).
+  system: z.string().optional(),
+  tools: z.array(z.string()).optional(),
+  model: z.string().optional(),
+  ephemeral: z.boolean().optional(),
 })
 
 const ChatCancel = Base.extend({
@@ -161,6 +170,17 @@ const FatalError = Base.extend({
   message: z.string(),
 })
 
+// Cross-context error report. Surfaces uncaught errors / unhandled rejections
+// from SW or offscreen contexts to the content tab so devs can see them in
+// F12 without opening separate DevTools windows. Not session-scoped; sessionId
+// in Base is set to a sentinel and is ignored by the content handler.
+const RuntimeError = Base.extend({
+  kind: z.literal('runtime/error'),
+  source: z.enum(['sw', 'offscreen']),
+  message: z.string(),
+  stack: z.string().optional(),
+})
+
 export const AgentEvent = z.discriminatedUnion('kind', [
   MessageAppended,
   MessageStreamChunk,
@@ -173,6 +193,7 @@ export const AgentEvent = z.discriminatedUnion('kind', [
   PingEvt,
   CommandAck,
   FatalError,
+  RuntimeError,
 ])
 export type AgentEvent = z.infer<typeof AgentEvent>
 
