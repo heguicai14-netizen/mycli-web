@@ -61,6 +61,34 @@ describe('fakeFetch', () => {
     expect(r2.ok).toBe(true)
     expect((r2.data as any).body).toBe('ok')
   })
+  it('falls back to loadSnapshot for fixture:// URLs (multi-tab tasks)', async () => {
+    const t = { ...baseTask, fixtures: { tabs: ['multi/tab-a.html'] } }
+    const c = makeFixtureCtx(
+      t,
+      (name) => (name === 'multi/tab-a.html' ? '<title>A</title><body>tab a body</body>' : undefined),
+      () => undefined,
+    )
+    const r = await makeFakeFetch(c).execute({ url: 'fixture://multi/tab-a.html' }, {})
+    expect(r.ok).toBe(true)
+    expect((r.data as any).body).toContain('tab a body')
+    expect((r.data as any).status).toBe(200)
+  })
+  it('still errors when fixture:// URL has no matching snapshot', async () => {
+    const t = { ...baseTask, fixtures: {} }
+    const c = makeFixtureCtx(t, () => undefined, () => undefined)
+    const r = await makeFakeFetch(c).execute({ url: 'fixture://does-not-exist.html' }, {})
+    expect(r.ok).toBe(false)
+  })
+  it('fetchMap entry takes precedence over fixture:// fallback', async () => {
+    const t = {
+      ...baseTask,
+      fixtures: { fetchMap: { 'fixture://a.html': 'override' } },
+    }
+    const c = makeFixtureCtx(t, () => 'snapshot-content', () => undefined)
+    const r = await makeFakeFetch(c).execute({ url: 'fixture://a.html' }, {})
+    expect(r.ok).toBe(true)
+    expect((r.data as any).body).toBe('override')
+  })
 })
 
 describe('fakeUseSkill', () => {

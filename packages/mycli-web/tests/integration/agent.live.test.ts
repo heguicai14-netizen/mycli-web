@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   createAgent,
+  createAgentService,
   makeOk,
   makeError,
   SkillRegistry,
@@ -10,19 +11,26 @@ import {
   type ChatMessage,
   type ToolDefinition,
   type AgentEvent,
+  type MessageStoreAdapter,
+  type MessageRecord,
 } from 'agent-kernel'
 
-// Live-LLM integration tests. Skipped by default — set MYCLI_TEST_API_KEY in
-// the environment to run them. They make real network calls and consume
-// tokens, so they don't run as part of `bun run test` unless opted into.
+// Live-LLM integration tests against a real OpenAI-compatible endpoint.
+// Skipped by default — they cost tokens and need network. Two ways to run:
 //
-//   MYCLI_TEST_API_KEY=sk-xxx \
-//   MYCLI_TEST_BASE_URL=https://api.openai.com/v1 \
-//   MYCLI_TEST_MODEL=gpt-4o-mini \
-//   bun run test tests/integration/agent.live.test.ts
+//   1) cp .env.example .env   # then fill in MYCLI_TEST_API_KEY
+//      bun run test:live
 //
-// MYCLI_TEST_BASE_URL and MYCLI_TEST_MODEL are optional and default to
-// OpenAI + gpt-4o-mini.
+//   2) one-shot:
+//      MYCLI_TEST_API_KEY=sk-xxx \
+//      MYCLI_TEST_BASE_URL=https://open.bigmodel.cn/api/paas/v4 \
+//      MYCLI_TEST_MODEL=glm-4-flash \
+//      bun run test:live
+//
+// Defaults if vars are missing: api.openai.com / gpt-4o-mini. The .env.example
+// in this package is preconfigured for Zhipu BigModel (the project's primary
+// dev target) so the easiest path is `cp .env.example .env`, drop in a key,
+// and run.
 
 // node types aren't declared for the tests project, so reach for env via
 // globalThis to keep this file from forcing a tsconfig change.
@@ -227,6 +235,241 @@ describe.skipIf(!live)('agent live integration (real LLM)', () => {
       expect(['cancel', 'error']).toContain(done.stopReason)
     }
   }, 30_000)
+
+  // ---------- 9. Token usage event ----------
+  // Documents whether the configured provider returns prompt_tokens in the
+  // streaming response. Some providers (notably Zhipu BigModel as of 2026-05)
+  // ignore stream_options.include_usage and never send a usage chunk, which
+  // means the agent's `usage` event never fires for them. We don't fail the
+  // test in that case — we just record what the provider does so future
+  // regressions are obvious from the test output.
+  it('9. usage — provider may or may not return prompt_tokens', async () => {
+    const agent = buildAgent()
+    const events = await collect(
+      agent.send('Reply with a single short word: "ok".'),
+    )
+    const usageEvents = events.filter((e) => e.kind === 'usage')
+    if (usageEvents.length === 0) {
+      console.warn(
+        `[live] provider ${baseUrl} did not emit usage on the stream. ` +
+          'Context bar will not update for this provider.',
+      )
+    } else {
+      // If usage IS reported, both fields must be non-negative integers.
+      for (const ev of usageEvents) {
+        if (ev.kind !== 'usage') continue
+        expect(ev.input).toBeGreaterThanOrEqual(0)
+        expect(ev.output).toBeGreaterThanOrEqual(0)
+      }
+    }
+    // Either way, the turn must complete cleanly.
+    const done = events.find((e) => e.kind === 'done')
+    expect(done).toBeDefined()
+    if (done && done.kind === 'done') {
+      expect(done.stopReason).toBe('end_turn')
+    }
+  }, 30_000)
+
+  // ---------- 10. Tool result truncation actually shrinks the LLM view ----------
+  // We give the model a tool that returns a 60KB blob with a secret marker
+  // hidden well past the 1000-char cap. With truncation enabled, the LLM
+  // shouldn't see the marker; without it, it would. We assert the LLM either
+  // fails to find it or admits it can't see it — verifying truncation took
+  // effect end-to-end (not just unit-tested).
+  it('10. tool truncation — large tool output is capped before reaching LLM', async () => {
+    const SECRET = 'PURPLE-OCTOPUS-9417'
+    // 60KB filler followed by the secret. With toolMaxOutputChars=500, the
+    // LLM never sees the secret in the tool result.
+    const body = 'lorem ipsum '.repeat(5000) + ` ${SECRET} ` + 'tail'.repeat(500)
+
+    const bigDocTool: ToolDefinition<Record<string, never>, { text: string }, any> = {
+      name: 'fetchBigDoc',
+      description:
+        'Returns a large document. Search its full text for any keyword the user asks about.',
+      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      execute: async () => makeOk({ text: body }),
+    }
+
+    const agent = createAgent({
+      llm: { apiKey, baseUrl, model },
+      tools: [bigDocTool],
+      toolContext: {},
+      toolMaxOutputChars: 500, // aggressive cap so the secret falls outside
+    })
+
+    const events = await collect(
+      agent.send(
+        `Call fetchBigDoc, then tell me whether the document contains the exact ` +
+          `string "${SECRET}". Answer YES or NO with a brief reason.`,
+      ),
+    )
+
+    const done = events.find((e) => e.kind === 'done')
+    expect(done).toBeDefined()
+    if (done && done.kind === 'done') {
+      const text = done.assistantText.toLowerCase()
+      // The LLM must not claim it saw the secret. Acceptable answers:
+      //   - "no" / "doesn't appear" / "not present"
+      //   - "truncated" / "can't see" / "cut off" (the LLM noticed the marker)
+      // Unacceptable: a confident "yes" with the secret string echoed.
+      const claimsYes =
+        /\byes\b/.test(text) && text.includes(SECRET.toLowerCase())
+      expect(claimsYes).toBe(false)
+    }
+  }, 60_000)
+
+  // ---------- 11. Multi-iteration tool flow ----------
+  // Forces the LLM to use a tool, get a result, then use it AGAIN with
+  // different args derived from the first result. This exercises the
+  // assistant/iter event boundary and the same-turn history accumulation.
+  it('11. multi-iteration — LLM chains two tool calls in one turn', async () => {
+    let firstArgs: any = null
+    let secondArgs: any = null
+    const lookup: ToolDefinition<{ key: string }, { value: string }, any> = {
+      name: 'lookup',
+      description:
+        'Look up a value by key. Known keys: "first" returns "use the key second next". ' +
+        '"second" returns "the answer is 42".',
+      inputSchema: {
+        type: 'object',
+        properties: { key: { type: 'string' } },
+        required: ['key'],
+        additionalProperties: false,
+      },
+      execute: async (input) => {
+        if (firstArgs === null) firstArgs = input
+        else if (secondArgs === null) secondArgs = input
+        if (input.key === 'first') return makeOk({ value: 'use the key second next' })
+        if (input.key === 'second') return makeOk({ value: 'the answer is 42' })
+        return makeOk({ value: 'unknown key' })
+      },
+    }
+
+    const agent = buildAgent([lookup])
+    const events = await collect(
+      agent.send(
+        'Call the lookup tool with key="first", read the result, then call lookup again ' +
+          'with whatever key the result tells you. Then report just the final answer string.',
+      ),
+    )
+
+    const toolStarts = events.filter((e) => e.kind === 'tool/start')
+    expect(toolStarts.length).toBeGreaterThanOrEqual(2)
+
+    const done = events.find((e) => e.kind === 'done')
+    expect(done).toBeDefined()
+    if (done && done.kind === 'done') {
+      expect(done.assistantText).toMatch(/42/)
+    }
+    // Order matters: first call uses key="first", second uses key="second".
+    expect(firstArgs?.key).toBe('first')
+    expect(secondArgs?.key).toBe('second')
+  }, 90_000)
+
+  // ---------- 12. agentService full stack with in-memory store ----------
+  // Drives the production code path (agentService.runTurn) end-to-end with a
+  // real LLM. Verifies that across turns the assistant message rows AND tool
+  // rows get persisted with the correct roles + tool_calls / tool_call_id —
+  // the bones of how the agent remembers what it did last turn.
+  it('12. agentService — persists assistant + tool rows across two turns', async () => {
+    const records: MessageRecord[] = []
+    const wireEvents: any[] = []
+
+    const inMemStore: MessageStoreAdapter = {
+      async activeConversationId() {
+        return 'conv-test'
+      },
+      async append(msg) {
+        const row: MessageRecord = {
+          id: `m-${records.length + 1}`,
+          role: msg.role,
+          content: msg.content,
+          createdAt: Date.now() + records.length,
+          pending: msg.pending,
+          toolCalls: msg.toolCalls,
+          toolCallId: msg.toolCallId,
+        }
+        records.push(row)
+        return { id: row.id, createdAt: row.createdAt }
+      },
+      async list() {
+        return [...records]
+      },
+      async update(id, patch) {
+        const r = records.find((m) => m.id === id)
+        if (r) {
+          if (patch.content !== undefined) r.content = patch.content
+          if (patch.pending !== undefined) r.pending = patch.pending
+          if (patch.toolCalls !== undefined) r.toolCalls = patch.toolCalls
+        }
+      },
+    }
+
+    const flagTool: ToolDefinition<Record<string, never>, { flag: string }, any> = {
+      name: 'getFlag',
+      description: 'Returns a single secret flag string the user asked for.',
+      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      execute: async () => makeOk({ flag: 'AURORA-7782' }),
+    }
+
+    const svc = createAgentService({
+      settings: {
+        load: async () => ({
+          apiKey,
+          baseUrl,
+          model,
+          toolMaxIterations: 5,
+        }),
+      },
+      emit: (ev) => wireEvents.push(ev),
+      messageStore: inMemStore,
+      toolContext: {
+        build: async () => ({ rpc: { domOp: () => {}, chromeApi: () => {} } }),
+      },
+      tools: [flagTool],
+    })
+
+    // Turn 1: force a tool call.
+    await svc.runTurn({
+      sessionId: '00000000-0000-0000-0000-000000000001',
+      text: 'Call getFlag and tell me the flag value verbatim.',
+    })
+
+    // After turn 1 we expect at minimum: 1 user, ≥1 assistant (with toolCalls),
+    // ≥1 tool, ≥1 assistant (final answer).
+    expect(records.find((r) => r.role === 'user')).toBeDefined()
+    const assistantRows = records.filter((r) => r.role === 'assistant')
+    expect(assistantRows.length).toBeGreaterThanOrEqual(1)
+    const toolRow = records.find((r) => r.role === 'tool')
+    expect(toolRow).toBeDefined()
+    expect(toolRow!.toolCallId).toMatch(/.+/) // some non-empty id
+    const assistantWithToolCalls = assistantRows.find(
+      (r) => r.toolCalls && r.toolCalls.length > 0,
+    )
+    expect(assistantWithToolCalls).toBeDefined()
+    expect(assistantWithToolCalls!.toolCalls![0].name).toBe('getFlag')
+
+    // Turn 2: ask about the prior result. The LLM should NOT need to re-call
+    // because the tool row is in history — but we don't strictly assert that.
+    // We do assert the LLM correctly reports the flag value.
+    const turn1ToolCallCount = records.filter((r) => r.role === 'tool').length
+    await svc.runTurn({
+      sessionId: '00000000-0000-0000-0000-000000000001',
+      text: 'What was the flag value you got? Reply with just the flag string.',
+    })
+    const finalAssistant = records[records.length - 1]
+    expect(finalAssistant.role).toBe('assistant')
+    expect(String(finalAssistant.content)).toMatch(/AURORA-7782/)
+
+    // Track whether turn 2 re-called the tool — informational, not an
+    // assertion (LLMs sometimes choose to re-verify).
+    const turn2ToolCallCount =
+      records.filter((r) => r.role === 'tool').length - turn1ToolCallCount
+    console.log(
+      `[live] turn 2 re-called the tool ${turn2ToolCallCount} time(s). ` +
+        '0 means the LLM correctly used the persisted tool result from turn 1.',
+    )
+  }, 120_000)
 
   it('8. skill flow — LLM calls useSkill and follows its instructions', async () => {
     // Build a skill registry with one skill that delegates to a fake readPage.
