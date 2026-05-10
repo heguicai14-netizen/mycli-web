@@ -53,6 +53,10 @@ export interface CreateAgentClientOptions {
   sessionId?: string
   /** Auto-reconnect on port disconnect. Default true. */
   reconnect?: boolean
+  /** Send a no-op `ping` every N ms once connected to keep the MV3 SW warm.
+   *  Default 25_000. Set to 0 to disable. The hub acks pings unconditionally,
+   *  so this is a free turn that never reaches the offscreen agent loop. */
+  heartbeatMs?: number
 }
 
 export interface AgentClient {
@@ -77,11 +81,18 @@ export function createAgentClient(opts: CreateAgentClientOptions = {}): AgentCli
     reconnect: opts.reconnect ?? true,
   })
   let connected = false
+  const heartbeatMs = opts.heartbeatMs ?? 25_000
+  let heartbeatTimer: ReturnType<typeof setInterval> | undefined
 
   async function ensureConnected(): Promise<void> {
     if (connected) return
     await rpc.connect()
     connected = true
+    if (heartbeatMs > 0 && !heartbeatTimer) {
+      heartbeatTimer = setInterval(() => {
+        rpc.send({ kind: 'ping' as any }).catch(() => {})
+      }, heartbeatMs)
+    }
   }
 
   function message(msgOpts: MessageOptions): AsyncIterable<AgentEvent> {
@@ -241,6 +252,10 @@ export function createAgentClient(opts: CreateAgentClientOptions = {}): AgentCli
   }
 
   function close() {
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer)
+      heartbeatTimer = undefined
+    }
     rpc.disconnect()
     connected = false
   }

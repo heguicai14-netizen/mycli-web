@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { installHub, createAgentClient } from 'agent-kernel'
 
 // Stand up a minimal "fake offscreen" that replies to a chat/send the same
@@ -153,5 +153,65 @@ describe('AgentClient.oneShot', () => {
     agent.close()
 
     expect(receivedCmd.ephemeral).toBe(false)
+  })
+})
+
+describe('AgentClient heartbeat', () => {
+  it('sends a ping every heartbeatMs (default 25s) once connected', async () => {
+    vi.useFakeTimers()
+    try {
+      installHub({ mode: 'offscreen-forward' })
+
+      const sentCmds: any[] = []
+      // Capture cmds the SW forwards to the fake offscreen. The hub initiates
+      // its sw-to-offscreen port lazily on first ClientCmd, so the listener
+      // must be in place before the agent sends anything.
+      chrome.runtime.onConnect.addListener((p: any) => {
+        if (p.name !== 'sw-to-offscreen') return
+        p.onMessage.addListener((m: any) => sentCmds.push(m))
+      })
+
+      const agent = createAgentClient({ reconnect: false })
+      // Kick off a message stream to force ensureConnected → heartbeat setup.
+      // Don't await — the fake offscreen here doesn't reply, and we only need
+      // the connection-side effect.
+      const iter = agent.message({ text: 'hi' })[Symbol.asyncIterator]()
+      void iter.next()
+      // Drain microtasks so rpc.connect() resolves and ensureConnected sets
+      // up the heartbeat interval.
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Tick past one heartbeat cycle.
+      await vi.advanceTimersByTimeAsync(26_000)
+      const pings = sentCmds.filter((c) => c?.kind === 'ping')
+      expect(pings.length).toBeGreaterThanOrEqual(1)
+
+      agent.close()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not send ping when heartbeatMs=0', async () => {
+    vi.useFakeTimers()
+    try {
+      installHub({ mode: 'offscreen-forward' })
+      const sentCmds: any[] = []
+      chrome.runtime.onConnect.addListener((p: any) => {
+        if (p.name !== 'sw-to-offscreen') return
+        p.onMessage.addListener((m: any) => sentCmds.push(m))
+      })
+
+      const agent = createAgentClient({ reconnect: false, heartbeatMs: 0 })
+      const iter = agent.message({ text: 'hi' })[Symbol.asyncIterator]()
+      void iter.next()
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(60_000)
+      const pings = sentCmds.filter((c) => c?.kind === 'ping')
+      expect(pings.length).toBe(0)
+      agent.close()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
