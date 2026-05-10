@@ -1,10 +1,17 @@
 // IMPORTANT: polyfill must run before any module touches chrome.storage /
 // chrome.tabs. Other imports below are side-effect-free at module level.
-import { polyfillChromeApiInOffscreen } from './offscreenChromePolyfill'
+import { polyfillChromeApiInOffscreen } from 'agent-kernel'
 polyfillChromeApiInOffscreen()
 
-import { ClientCmd } from 'agent-kernel'
-import type { ExtensionToolCtx, ExtensionToolRpc } from '@ext-tools'
+import {
+  ClientCmd,
+  createAgentService,
+  sendDomOp,
+  callChromeApi,
+  fetchGetTool,
+} from 'agent-kernel'
+import { extensionTools, type ExtensionToolCtx, type ExtensionToolRpc } from '@ext-tools'
+import { useSkillTool, readSkillFileTool } from '@ext-skills'
 import { loadSettings } from './storage/settings'
 import {
   createConversation,
@@ -16,8 +23,6 @@ import {
   listMessagesByConversation,
   updateMessage,
 } from './storage/messages'
-import { sendDomOp, callChromeApi } from './domOpClient'
-import { createAgentService } from './agentService'
 
 console.log('[mycli-web] offscreen agent runtime booted at', new Date().toISOString())
 
@@ -156,6 +161,9 @@ const agentService = createAgentService({
   updateMessage,
   activeConversationId,
   buildToolContext,
+  // Kernel default is just [fetchGetTool]; extend with mycli-web's
+  // extension/skill tool sets explicitly.
+  tools: [fetchGetTool, ...extensionTools, useSkillTool, readSkillFileTool],
 })
 
 async function runChat(cmd: {

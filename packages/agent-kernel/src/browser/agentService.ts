@@ -9,15 +9,24 @@
 import {
   createAgent as defaultCreateAgent,
   type CreateAgentOptions,
-  type AgentSession as CoreAgentSession,
-  type ChatMessage,
-  type AgentEvent as CoreAgentEvent,
-  type ToolDefinition,
-} from 'agent-kernel'
-import { fetchGetTool } from 'agent-kernel'
-import { extensionTools, type ExtensionToolCtx } from '@ext-tools'
-import { useSkillTool, readSkillFileTool } from '@ext-skills'
-import type { Settings } from './storage/settings'
+} from '../core/createAgent'
+import type { AgentSession as CoreAgentSession } from '../core/AgentSession'
+import type { ChatMessage } from '../core/OpenAICompatibleClient'
+import type { AgentEvent as CoreAgentEvent } from '../core/protocol'
+import type { ToolDefinition } from '../core/types'
+import { fetchGetTool } from '../core/tools/fetchGet'
+
+// Temporary local shape; replaced by SettingsAdapter interface in Phase 2.
+// Consumers pass a `loadSettings: () => Promise<Settings>` callback today.
+export interface Settings {
+  apiKey: string
+  baseUrl: string
+  model: string
+  systemPromptAddendum?: string
+  toolMaxIterations?: number
+  // additional fields the consumer settings object may carry — passthrough
+  [key: string]: unknown
+}
 
 export interface RunTurnInput {
   sessionId: string
@@ -64,8 +73,9 @@ export interface AgentServiceDeps {
   ) => Promise<void>
   activeConversationId: () => Promise<string>
   /** Build the per-turn ToolExecContext (tabId, rpc, etc). cid is undefined
-   *  for ephemeral turns. */
-  buildToolContext: (cid: string | undefined) => Promise<ExtensionToolCtx>
+   *  for ephemeral turns. The returned context is passed verbatim as the
+   *  agent's ExtraCtx — kernel doesn't care about its shape. */
+  buildToolContext: (cid: string | undefined) => Promise<unknown>
   /** Default tool list, before per-turn allowlist filter. */
   tools?: ToolDefinition<any, any, any>[]
   /** Override createAgent (tests use this to inject a fake LLM client). */
@@ -86,12 +96,10 @@ export interface AgentService {
 }
 
 export function createAgentService(deps: AgentServiceDeps): AgentService {
-  const allTools = deps.tools ?? [
-    fetchGetTool,
-    ...extensionTools,
-    useSkillTool,
-    readSkillFileTool,
-  ]
+  // Default tool list intentionally minimal — only the kernel-shipped
+  // fetchGetTool. Consumers wanting in-page DOM/extension tools or skills
+  // pass an explicit `tools: [...]` list.
+  const allTools = deps.tools ?? [fetchGetTool]
   const createAgent = deps.createAgent ?? defaultCreateAgent
 
   return {

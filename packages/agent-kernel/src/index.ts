@@ -56,3 +56,17 @@ export type {
   OneShotToolCall,
   CreateAgentClientOptions,
 } from './browser/agentClient'
+
+// === browser agent service ===
+export {
+  createAgentService,
+  type AgentService,
+  type AgentServiceDeps,
+  type RunTurnInput,
+  type Settings,
+} from './browser/agentService'
+
+// === browser RPC helpers / chrome.* polyfill ===
+export { sendDomOp, callChromeApi } from './browser/domOpClient'
+export { installDomOpRouter } from './browser/domOpRouter'
+export { polyfillChromeApiInOffscreen } from './browser/offscreenChromePolyfill'

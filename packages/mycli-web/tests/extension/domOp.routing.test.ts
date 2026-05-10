@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { installMultiContextChrome, type MultiContextBus } from '../mocks/chromeMultiContext'
-import { sendDomOp, callChromeApi } from '@ext/domOpClient'
-import { installDomOpRouter } from '@ext/domOpRouter'
+import { sendDomOp, callChromeApi, installDomOpRouter } from 'agent-kernel'
 import { installDomHandlers } from '@ext-tools/content/domHandlers'
 
 // Wires the three real production pieces of the dom_op broadcast transport

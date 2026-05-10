@@ -1,6 +1,5 @@
-import { installHub } from 'agent-kernel'
+import { installHub, installDomOpRouter } from 'agent-kernel'
 import { setTransientUi, getTransientUi } from './storage/transient'
-import { installDomOpRouter } from './domOpRouter'
 
 const OFFSCREEN_URL = chrome.runtime.getURL('html/offscreen.html')
 
