@@ -2,6 +2,26 @@ export interface ClientConfig {
   apiKey: string
   baseUrl: string
   model: string
+  /**
+   * Hard timeout in ms for the LLM fetch. Default 60_000. Set to 0 to disable
+   * (fetch hangs indefinitely on unresponsive endpoints).
+   */
+  fetchTimeoutMs?: number
+}
+
+function combineSignals(...signals: (AbortSignal | undefined)[]): AbortSignal | undefined {
+  const live = signals.filter((s): s is AbortSignal => !!s)
+  if (live.length === 0) return undefined
+  if (live.length === 1) return live[0]
+  const ctrl = new AbortController()
+  for (const s of live) {
+    if (s.aborted) {
+      ctrl.abort(s.reason)
+      return ctrl.signal
+    }
+    s.addEventListener('abort', () => ctrl.abort(s.reason), { once: true })
+  }
+  return ctrl.signal
 }
 
 export interface ChatMessage {
@@ -52,6 +72,19 @@ export class OpenAICompatibleClient {
     }
     if (req.tools && req.tools.length) body.tools = req.tools
 
+    const timeoutMs = this.cfg.fetchTimeoutMs ?? 60_000
+    const timeoutController = timeoutMs > 0 ? new AbortController() : undefined
+    const timeoutId =
+      timeoutMs > 0 && timeoutController
+        ? setTimeout(
+            () => timeoutController.abort(new Error('llm fetch timeout')),
+            timeoutMs,
+          )
+        : undefined
+
+    // Combine consumer signal with our timeout controller
+    const combinedSignal = combineSignals(req.signal, timeoutController?.signal)
+
     const res = await fetch(url, {
       method: 'POST',
       headers: {
@@ -59,8 +92,14 @@ export class OpenAICompatibleClient {
         authorization: `Bearer ${this.cfg.apiKey}`,
       },
       body: JSON.stringify(body),
-      signal: req.signal,
+      signal: combinedSignal,
+    }).catch((e) => {
+      if (timeoutController?.signal.aborted) {
+        throw new Error(`LLM fetch timeout after ${timeoutMs}ms`)
+      }
+      throw e
     })
+    if (timeoutId) clearTimeout(timeoutId)
 
     if (!res.ok) {
       let detail: unknown = undefined
