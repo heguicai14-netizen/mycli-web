@@ -11,4 +11,5 @@
 | article.html                   | L3/skill-orchestration |
 | exp-dashboard-12345.html       | L2/exp-cross-validate, L3/exp-go-no-go |
 | multi-tab-context/tab-{a,b}.html | L2/cross-tab-compare, L3/skill-orchestration |
-| page-with-error.html / page-clean.html | L2/conditional-branch |
+| page-with-error.html              | L2/conditional-branch (if-branch)        |
+| page-clean.html                   | L2/conditional-branch (else-branch — deferred) |

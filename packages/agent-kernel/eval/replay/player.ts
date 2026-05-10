@@ -1,3 +1,5 @@
+import fs from 'node:fs'
+import path from 'node:path'
 import type { StreamEvent, ChatRequest, OpenAICompatibleClient } from '../../src/core/OpenAICompatibleClient'
 
 export interface FixtureReadStore {
@@ -34,25 +36,10 @@ export function wrapForReplay(
   }
 }
 
-// biome-ignore lint: dynamic require intentional for eval-only (no node types in this tsconfig)
-function getNodeFs(): any {
-  return (globalThis as any).__node_fs__ ??
-    (function () { try { return (eval('require'))('node:fs') } catch { return null } })()
-}
-
-// biome-ignore lint: dynamic require intentional for eval-only (no node types in this tsconfig)
-function getNodePath(): any {
-  return (globalThis as any).__node_path__ ??
-    (function () { try { return (eval('require'))('node:path') } catch { return null } })()
-}
-
 /** Directory-backed store for CLI usage. */
 export function makeFsReplayStore(dir: string): FixtureReadStore {
   return {
     get(key: string): unknown[] | undefined {
-      const fs = getNodeFs()
-      const path = getNodePath()
-      if (!fs || !path) return undefined
       const safe = key.replace(/[/\\]/g, '__')
       const p = path.join(dir, `${safe}.json`)
       try {
@@ -65,18 +52,11 @@ export function makeFsReplayStore(dir: string): FixtureReadStore {
 }
 
 export function makeFsRecordStore(dir: string): { put: (k: string, v: unknown[]) => void } {
-  const fs = getNodeFs()
-  const path = getNodePath()
-  if (fs && path) {
-    fs.mkdirSync(dir, { recursive: true })
-  }
+  fs.mkdirSync(dir, { recursive: true })
   return {
     put(key, value) {
-      const fs2 = getNodeFs()
-      const path2 = getNodePath()
-      if (!fs2 || !path2) return
       const safe = key.replace(/[/\\]/g, '__')
-      fs2.writeFileSync(path2.join(dir, `${safe}.json`), JSON.stringify(value, null, 2), 'utf8')
+      fs.writeFileSync(path.join(dir, `${safe}.json`), JSON.stringify(value, null, 2), 'utf8')
     },
   }
 }

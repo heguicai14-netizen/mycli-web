@@ -81,8 +81,9 @@ async function main() {
   fs.mkdirSync(subdir, { recursive: true })
   for (const r of c.reporter) {
     if (r === 'console') console.log(renderConsole(report))
-    if (r === 'markdown') fs.writeFileSync(path.join(subdir, 'report.md'),  renderMarkdown(report))
-    if (r === 'json')     fs.writeFileSync(path.join(subdir, 'report.json'), renderJson(report))
+    else if (r === 'markdown') fs.writeFileSync(path.join(subdir, 'report.md'), renderMarkdown(report))
+    else if (r === 'json') fs.writeFileSync(path.join(subdir, 'report.json'), renderJson(report))
+    else console.warn(`unknown reporter: ${r}`)
   }
   // 'latest' symlink
   const latest = path.join(c.outDir, 'latest')
