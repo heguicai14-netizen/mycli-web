@@ -1,6 +1,7 @@
 {
   "files": [],
   "references": [
+    { "path": "./packages/agent-kernel" },
     { "path": "./packages/mycli-web" }
   ]
 }

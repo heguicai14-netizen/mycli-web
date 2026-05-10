@@ -1,0 +1,11 @@
+{
+  "extends": "../mycli-web/tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "src",
+    "outDir": "../../node_modules/.cache/tsc/agent-kernel",
+    "tsBuildInfoFile": "../../node_modules/.cache/tsc/agent-kernel.tsbuildinfo",
+    "types": []
+  },
+  "include": ["src/**/*.ts"]
+}
