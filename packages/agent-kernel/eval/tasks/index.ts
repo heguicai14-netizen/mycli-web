@@ -1,4 +1,4 @@
-import type { Suite } from '../core/types'
+import type { Suite, Task } from '../core/types'
 
 import { task as extractTitle }     from './L1-basic/extract-title.task'
 import { task as extractSelection } from './L1-basic/extract-selection.task'
@@ -16,10 +16,35 @@ import { task as failThenFallback }    from './L2-chain/fail-then-fallback.task'
 import { task as expTreatmentReadout } from './L2-chain/exp-treatment-readout.task'
 import { task as expCrossValidate }    from './L2-chain/exp-cross-validate.task'
 
+import { task as skillOrchestration } from './L3-complex/skill-orchestration.task'
+import { task as decomposition }      from './L3-complex/decomposition.task'
+import { task as recoverAndReplan }   from './L3-complex/recover-and-replan.task'
+import { task as expGoNoGo }          from './L3-complex/exp-go-no-go.task'
+
 export const builtinSuite: Suite = [
-  extractTitle, extractSelection, listTabs,
-  getBySelector, fetchJson, screenshot,
+  extractTitle, extractSelection, listTabs, getBySelector, fetchJson, screenshot,
   issueSummary, crossTabCompare, fetchThenExtract, conditionalBranch,
   multiStepExtract, failThenFallback, expTreatmentReadout, expCrossValidate,
-  // L3 in T21
+  skillOrchestration, decomposition, recoverAndReplan, expGoNoGo,
 ]
+
+// IDs that smoke mode runs (PR-time, with replay)
+export const smokeIds: string[] = [
+  ...['L1/extract-title', 'L1/extract-selection', 'L1/list-tabs',
+      'L1/get-by-selector', 'L1/fetch-json', 'L1/screenshot-describe'],
+  'L2/issue-summary',
+  'L2/exp-treatment-readout',
+]
+
+export function filterSuite(
+  suite: Suite,
+  filter?: { levels?: Task['level'][]; tags?: string[]; ids?: string[] },
+): Suite {
+  if (!filter) return suite
+  return suite.filter((t) => {
+    if (filter.ids && !filter.ids.includes(t.id)) return false
+    if (filter.levels && !filter.levels.includes(t.level)) return false
+    if (filter.tags && !(t.tags ?? []).some((tag) => filter.tags!.includes(tag))) return false
+    return true
+  })
+}

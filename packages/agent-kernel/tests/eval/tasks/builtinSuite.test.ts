@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { builtinSuite } from '../../../eval/tasks/index'
+import { builtinSuite, smokeIds, filterSuite } from '../../../eval/tasks/index'
 
 describe('builtinSuite', () => {
   it('every task has required fields', () => {
@@ -16,5 +16,20 @@ describe('builtinSuite', () => {
       expect(ids.has(t.id), `dup id: ${t.id}`).toBe(false)
       ids.add(t.id)
     }
+  })
+  it('has 18 tasks total: 6 L1 + 8 L2 + 4 L3', () => {
+    expect(builtinSuite).toHaveLength(18)
+    expect(builtinSuite.filter((t) => t.level === 'L1')).toHaveLength(6)
+    expect(builtinSuite.filter((t) => t.level === 'L2')).toHaveLength(8)
+    expect(builtinSuite.filter((t) => t.level === 'L3')).toHaveLength(4)
+  })
+  it('smokeIds all map to real tasks', () => {
+    const ids = new Set(builtinSuite.map((t) => t.id))
+    for (const id of smokeIds) expect(ids.has(id), id).toBe(true)
+  })
+  it('filterSuite by level/tag/ids works', () => {
+    expect(filterSuite(builtinSuite, { levels: ['L3'] })).toHaveLength(4)
+    expect(filterSuite(builtinSuite, { tags: ['data-analysis'] })).toHaveLength(3)
+    expect(filterSuite(builtinSuite, { ids: ['L1/extract-title'] })).toHaveLength(1)
   })
 })
