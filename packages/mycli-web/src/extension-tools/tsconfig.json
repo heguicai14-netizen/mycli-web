@@ -7,8 +7,6 @@
     "tsBuildInfoFile": "../../node_modules/.cache/tsc/extension-tools.tsbuildinfo",
     "types": ["chrome", "vite/client"]
   },
-  "references": [
-    { "path": "../agent-core" }
-  ],
+  "references": [],
   "include": ["**/*.ts"]
 }

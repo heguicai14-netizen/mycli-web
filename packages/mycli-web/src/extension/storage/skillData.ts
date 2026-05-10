@@ -1,5 +1,5 @@
 import { openDb, type SkillDataRow } from './db'
-import type { SkillId } from '@core'
+import type { SkillId } from 'agent-kernel'
 
 export async function setSkillValue(skillId: SkillId, key: string, value: unknown): Promise<void> {
   const db = await openDb()

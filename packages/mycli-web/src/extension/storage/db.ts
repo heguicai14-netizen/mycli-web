@@ -1,5 +1,5 @@
 import { openDB, deleteDB, type IDBPDatabase, type DBSchema } from 'idb'
-import type { ConversationId, MessageId, SkillId } from '@core'
+import type { ConversationId, MessageId, SkillId } from 'agent-kernel'
 
 export const DB_NAME = 'mycli-web'
 export const DB_VERSION = 1

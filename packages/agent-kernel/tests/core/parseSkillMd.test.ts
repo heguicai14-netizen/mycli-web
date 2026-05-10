@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseSkillMd } from '@core'
+import { parseSkillMd } from 'agent-kernel'
 
 describe('parseSkillMd', () => {
   it('extracts frontmatter and body for a well-formed skill', () => {

@@ -1,7 +1,7 @@
 export type { ExtensionToolCtx, ExtensionToolRpc } from './ctx'
 export { DomOp } from './DomOp'
 
-import type { ToolDefinition } from '@core'
+import type { ToolDefinition } from 'agent-kernel'
 import type { ExtensionToolCtx } from './ctx'
 import { readPageTool } from './tools/readPage'
 import { readSelectionTool } from './tools/readSelection'

@@ -1,5 +1,5 @@
 import { openDb, type MessageRow } from './db'
-import type { ConversationId, MessageId, Role } from '@core'
+import type { ConversationId, MessageId, Role } from 'agent-kernel'
 
 function newId(): MessageId {
   return crypto.randomUUID()

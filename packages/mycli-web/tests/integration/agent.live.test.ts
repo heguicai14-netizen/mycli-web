@@ -10,7 +10,7 @@ import {
   type ChatMessage,
   type ToolDefinition,
   type AgentEvent,
-} from '@core'
+} from 'agent-kernel'
 
 // Live-LLM integration tests. Skipped by default — set MYCLI_TEST_API_KEY in
 // the environment to run them. They make real network calls and consume

@@ -15,8 +15,6 @@
     "paths": {
       "@/*": ["./src/*"],
       "@ext/*": ["./src/extension/*"],
-      "@core": ["./src/agent-core/index.ts"],
-      "@core/*": ["./src/agent-core/*"],
       "@ext-tools": ["./src/extension-tools/index.ts"],
       "@ext-tools/*": ["./src/extension-tools/*"],
       "@ext-skills": ["./src/extension-skills/index.ts"],

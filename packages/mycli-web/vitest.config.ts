@@ -6,7 +6,6 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, 'src'),
       '@ext': path.resolve(__dirname, 'src/extension'),
-      '@core': path.resolve(__dirname, 'src/agent-core'),
       '@ext-tools': path.resolve(__dirname, 'src/extension-tools'),
       '@ext-skills': path.resolve(__dirname, 'src/extension-skills'),
     },

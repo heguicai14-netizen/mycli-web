@@ -13,8 +13,12 @@
     "test": "vitest run",
     "typecheck": "tsc -b"
   },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
   "devDependencies": {
-    "vitest": "^2.0.2",
-    "typescript": "^5.5.3"
+    "jsdom": "^24.1.0",
+    "typescript": "^5.5.3",
+    "vitest": "^2.0.2"
   }
 }

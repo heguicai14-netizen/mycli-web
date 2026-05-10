@@ -1,4 +1,4 @@
-import type { ToolResult, ConversationId } from '@core'
+import type { ToolResult, ConversationId } from 'agent-kernel'
 
 export interface ExtensionToolRpc {
   domOp(op: unknown, timeoutMs?: number): Promise<ToolResult>

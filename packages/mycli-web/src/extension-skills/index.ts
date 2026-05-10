@@ -1,4 +1,4 @@
-import { createUseSkillTool, createReadSkillFileTool } from '@core'
+import { createUseSkillTool, createReadSkillFileTool } from 'agent-kernel'
 import { buildRegistryFromModules } from './loader'
 
 // Vite-compile-time glob of every markdown file under skills/. Returns a

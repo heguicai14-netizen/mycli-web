@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { estimateTokens, estimateMessageTokens } from '@core/tokenBudget'
+import { estimateTokens, estimateMessageTokens } from 'agent-kernel'
 
 describe('tokenBudget', () => {
   it('estimates 1 token per ~4 chars', () => {

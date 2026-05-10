@@ -1,4 +1,4 @@
-import type { ToolDefinition } from '@core'
+import type { ToolDefinition } from 'agent-kernel'
 import type { ExtensionToolCtx } from '../ctx'
 
 interface TabSummary {

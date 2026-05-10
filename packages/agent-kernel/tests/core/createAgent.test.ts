@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
-import { createAgent, makeOk, makeError } from '@core'
-import type { OpenAICompatibleClient, StreamEvent } from '@core/OpenAICompatibleClient'
-import type { ToolDefinition } from '@core'
+import { createAgent, makeOk, makeError } from 'agent-kernel'
+import type { OpenAICompatibleClient, StreamEvent } from 'agent-kernel'
+import type { ToolDefinition } from 'agent-kernel'
 
 function fakeClient(scripts: StreamEvent[][]): OpenAICompatibleClient {
   let turn = 0

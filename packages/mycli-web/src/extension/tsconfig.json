@@ -8,7 +8,6 @@
     "types": ["chrome", "vite/client"]
   },
   "references": [
-    { "path": "../agent-core" },
     { "path": "../extension-tools" },
     { "path": "../extension-skills" }
   ],

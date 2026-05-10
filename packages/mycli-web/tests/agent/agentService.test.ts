@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createAgentService } from '@ext/agentService'
-import type { AgentEvent as CoreAgentEvent, ToolDefinition } from '@core'
+import type { AgentEvent as CoreAgentEvent, ToolDefinition } from 'agent-kernel'
 
 // Minimal fake AgentSession that yields a scripted stream of agent-core events.
 function makeFakeAgent(events: CoreAgentEvent[]) {

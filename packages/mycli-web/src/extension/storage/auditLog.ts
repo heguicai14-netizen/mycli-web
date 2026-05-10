@@ -1,5 +1,5 @@
 import { openDb, type AuditLogRow } from './db'
-import type { ConversationId } from '@core'
+import type { ConversationId } from 'agent-kernel'
 
 export async function appendAudit(input: {
   conversationId?: ConversationId

@@ -13,8 +13,8 @@ import {
   type ChatMessage,
   type AgentEvent as CoreAgentEvent,
   type ToolDefinition,
-} from '@core'
-import { fetchGetTool } from '@core/tools/fetchGet'
+} from 'agent-kernel'
+import { fetchGetTool } from 'agent-kernel'
 import { extensionTools, type ExtensionToolCtx } from '@ext-tools'
 import { useSkillTool, readSkillFileTool } from '@ext-skills'
 import type { Settings } from './storage/settings'

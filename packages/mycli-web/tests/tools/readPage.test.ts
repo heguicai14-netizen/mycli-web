@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { readPageTool } from '@ext-tools/tools/readPage'
 import type { ExtensionToolCtx } from '@ext-tools/ctx'
-import type { ToolExecContext } from '@core'
+import type { ToolExecContext } from 'agent-kernel'
 
 type ReadPageCtx = ToolExecContext & ExtensionToolCtx
 

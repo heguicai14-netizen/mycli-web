@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { SkillRegistry, createReadSkillFileTool } from '@core'
+import { SkillRegistry, createReadSkillFileTool } from 'agent-kernel'
 
 function preload(): SkillRegistry {
   const r = new SkillRegistry()

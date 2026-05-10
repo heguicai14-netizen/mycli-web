@@ -33,8 +33,8 @@ import {
   createReadSkillFileTool,
   type ChatMessage,
   type ToolDefinition,
-} from '../src/agent-core'
-import { fetchGetTool } from '../src/agent-core/tools/fetchGet'
+  fetchGetTool,
+} from 'agent-kernel'
 import { buildRegistryFromModules } from '../src/extension-skills/loader'
 
 interface Creds {

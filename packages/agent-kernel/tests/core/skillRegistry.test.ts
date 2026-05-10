@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { SkillRegistry, type SkillDefinition } from '@core'
+import { SkillRegistry, type SkillDefinition } from 'agent-kernel'
 
 function makeSkill(name: string, overrides: Partial<SkillDefinition> = {}): SkillDefinition {
   return {

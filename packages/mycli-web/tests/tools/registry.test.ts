@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { ToolRegistry } from '@core/ToolRegistry'
-import type { ToolDefinition } from '@core'
+import { ToolRegistry } from 'agent-kernel'
+import type { ToolDefinition } from 'agent-kernel'
 
 const noopTool: ToolDefinition = {
   name: 'noop',

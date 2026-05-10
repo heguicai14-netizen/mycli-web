@@ -1,4 +1,4 @@
-import { SkillRegistry, parseSkillMd } from '@core'
+import { SkillRegistry, parseSkillMd } from 'agent-kernel'
 
 /**
  * Build a SkillRegistry from a flat path → raw-content map. Path keys must

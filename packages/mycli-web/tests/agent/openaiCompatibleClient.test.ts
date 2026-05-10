@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { OpenAICompatibleClient } from '@core/OpenAICompatibleClient'
+import { OpenAICompatibleClient } from 'agent-kernel'
 
 const baseConfig = {
   apiKey: 'sk-test',

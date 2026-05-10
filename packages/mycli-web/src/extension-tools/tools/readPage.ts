@@ -1,5 +1,5 @@
-import { makeError } from '@core/Tool'
-import type { ToolDefinition } from '@core'
+import { makeError } from 'agent-kernel'
+import type { ToolDefinition } from 'agent-kernel'
 import type { ExtensionToolCtx } from '../ctx'
 
 interface ReadPageInput {
