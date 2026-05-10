@@ -38,11 +38,11 @@ export interface TraceQualityInput {
   redundancy: number
   redundancyMax: number        // sum of max-redundant-calls limits across asserts; default 1
   hadFailure: boolean
-  recovered: boolean           // ignored if !hadFailure
+  recoveryScore: 0 | 0.5 | 1  // ignored when !hadFailure (treated as 1)
 }
 export function scoreTraceQuality(i: TraceQualityInput): number {
   const noRedun = clamp01(1 - i.redundancy / Math.max(1, i.redundancyMax))
-  const recovery = !i.hadFailure ? 1 : i.recovered ? 1 : 0
+  const recovery = !i.hadFailure ? 1 : i.recoveryScore
   return clamp01(
     i.callRate * W_TRACE_CALLS +
     noRedun    * W_TRACE_NO_REDUN +

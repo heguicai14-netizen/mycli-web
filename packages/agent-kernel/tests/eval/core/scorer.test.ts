@@ -50,7 +50,7 @@ describe('scoreTraceQuality', () => {
   it('all sub-scores 1 → 1.0', () => {
     expect(
       scoreTraceQuality({
-        callRate: 1, redundancy: 0, redundancyMax: 1, hadFailure: false, recovered: false,
+        callRate: 1, redundancy: 0, redundancyMax: 1, hadFailure: false, recoveryScore: 0,
       }),
     ).toBeCloseTo(1.0)
   })
@@ -60,17 +60,17 @@ describe('scoreTraceQuality', () => {
     // = 0.5*0.6 + 0.5*0.2 + 1*0.2 = 0.3 + 0.1 + 0.2 = 0.6
     expect(
       scoreTraceQuality({
-        callRate: 0.5, redundancy: 1, redundancyMax: 2, hadFailure: false, recovered: false,
+        callRate: 0.5, redundancy: 1, redundancyMax: 2, hadFailure: false, recoveryScore: 0,
       }),
     ).toBeCloseTo(0.6)
   })
 
   it('failure not recovered → recovery 0', () => {
-    // calls 1, no redundancy, hadFailure & not recovered → 0
+    // calls 1, no redundancy, hadFailure & recoveryScore 0 → 0
     // = 1*0.6 + 1*0.2 + 0*0.2 = 0.8
     expect(
       scoreTraceQuality({
-        callRate: 1, redundancy: 0, redundancyMax: 1, hadFailure: true, recovered: false,
+        callRate: 1, redundancy: 0, redundancyMax: 1, hadFailure: true, recoveryScore: 0,
       }),
     ).toBeCloseTo(0.8)
   })
@@ -78,9 +78,14 @@ describe('scoreTraceQuality', () => {
   it('failure recovered → recovery 1', () => {
     expect(
       scoreTraceQuality({
-        callRate: 1, redundancy: 0, redundancyMax: 1, hadFailure: true, recovered: true,
+        callRate: 1, redundancy: 0, redundancyMax: 1, hadFailure: true, recoveryScore: 1,
       }),
     ).toBeCloseTo(1.0)
+  })
+
+  it('failure with no follow-up call → recovery 0.5 → composite 0.9', () => {
+    expect(scoreTraceQuality({ callRate: 1, redundancy: 0, redundancyMax: 1, hadFailure: true, recoveryScore: 0.5 }))
+      .toBeCloseTo(0.9)
   })
 })
 

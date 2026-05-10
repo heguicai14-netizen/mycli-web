@@ -21,7 +21,7 @@ export interface TraceJudgeResult {
   redundancy: number
   redundancyMax: number
   hadFailure: boolean
-  recovered: boolean
+  recoveryScore: 0 | 0.5 | 1     // was: recovered: boolean
   failures: string[]
 }
 
@@ -92,7 +92,7 @@ export async function runSingleTask(args: RunSingleArgs): Promise<TaskReport> {
     redundancy: traceJ.redundancy,
     redundancyMax: traceJ.redundancyMax,
     hadFailure: traceJ.hadFailure,
-    recovered: traceJ.recovered,
+    recoveryScore: traceJ.recoveryScore,
   })
   const stepCount = trace.steps.filter((s) => s.kind === 'tool-call').length
   const efficiency = scoreEfficiency(

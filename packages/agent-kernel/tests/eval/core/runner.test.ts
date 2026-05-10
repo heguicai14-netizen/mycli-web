@@ -36,7 +36,7 @@ describe('runSingleTask', () => {
       }),
       runTraceJudges: () => ({
         callRate: 1, redundancy: 0, redundancyMax: 1,
-        hadFailure: false, recovered: false,
+        hadFailure: false, recoveryScore: 0,
         failures: [],
       }),
       runLlmJudge: async () => undefined,
@@ -65,7 +65,7 @@ describe('runSingleTask', () => {
       }),
       runTraceJudges: () => ({
         callRate: 1, redundancy: 0, redundancyMax: 1,
-        hadFailure: false, recovered: false,
+        hadFailure: false, recoveryScore: 0,
         failures: [],
       }),
       runLlmJudge: async () => undefined,
