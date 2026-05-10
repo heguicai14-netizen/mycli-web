@@ -39,6 +39,15 @@ const ChatLoadConversation = Base.extend({
   conversationId: Uuid,
 })
 
+const ChatListConversations = Base.extend({
+  kind: z.literal('chat/listConversations'),
+})
+
+const ChatDeleteConversation = Base.extend({
+  kind: z.literal('chat/deleteConversation'),
+  conversationId: Uuid,
+})
+
 const ChatResubscribe = Base.extend({
   kind: z.literal('chat/resubscribe'),
   conversationId: Uuid.optional(),
@@ -70,6 +79,8 @@ export const ClientCmd = z.discriminatedUnion('kind', [
   ChatCancel,
   ChatNewConversation,
   ChatLoadConversation,
+  ChatListConversations,
+  ChatDeleteConversation,
   ChatResubscribe,
   ApprovalReply,
   SkillSetEnabled,
@@ -184,6 +195,23 @@ const StateSnapshot = Base.extend({
   }),
 })
 
+// Snapshot of all conversations + which one is currently active. Emitted in
+// response to chat/listConversations and after any mutating cmd
+// (newConversation / deleteConversation / loadConversation) so the UI list
+// stays in sync with the kernel's view.
+const ConversationsList = Base.extend({
+  kind: z.literal('conversations/list'),
+  activeId: Uuid,
+  conversations: z.array(
+    z.object({
+      id: Uuid,
+      title: z.string(),
+      createdAt: z.number(),
+      updatedAt: z.number(),
+    }),
+  ),
+})
+
 const PingEvt = Base.extend({
   kind: z.literal('pong'),
 })
@@ -222,6 +250,7 @@ export const AgentEvent = z.discriminatedUnion('kind', [
   SubAgentUpdate,
   ApprovalRequested,
   StateSnapshot,
+  ConversationsList,
   PingEvt,
   CommandAck,
   FatalError,

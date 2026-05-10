@@ -53,6 +53,32 @@ function OptionsApp() {
           />
         </label>
 
+        <label className="block">
+          <span className="block text-sm font-medium">
+            Tool result max chars (sent to LLM)
+          </span>
+          <input
+            type="number"
+            min={0}
+            max={1_000_000}
+            step={1000}
+            value={settings.toolMaxOutputChars}
+            onChange={(e) =>
+              setSettings({
+                ...settings,
+                toolMaxOutputChars: Math.max(0, Number(e.target.value) || 0),
+              })
+            }
+            className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 font-mono text-sm"
+          />
+          <span className="mt-1 block text-xs text-slate-500">
+            Tool returns above this size are truncated for the LLM to control
+            cost and avoid context overflow. The full content is still stored
+            in IndexedDB and visible in the chat. 0 = no truncation. 50000
+            chars ≈ 12.5k tokens (default — covers most page reads).
+          </span>
+        </label>
+
         <fieldset className="rounded-md border border-slate-200 p-3">
           <legend className="px-1 text-sm font-semibold text-slate-700">
             Auto-compaction

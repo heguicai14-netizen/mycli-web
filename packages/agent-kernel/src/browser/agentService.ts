@@ -17,6 +17,7 @@ import type { AgentEvent as CoreAgentEvent } from '../core/protocol'
 import type { ToolDefinition } from '../core/types'
 import { fetchGetTool } from '../core/tools/fetchGet'
 import { compactMessages } from '../core/compactor'
+import { truncateForLLM } from '../core/truncate'
 import { estimateMessageTokens, estimateTokens } from '../core/tokenBudget'
 import type { SettingsAdapter } from '../adapters/SettingsAdapter'
 import type { MessageStoreAdapter, MessageRecord } from '../adapters/MessageStoreAdapter'
@@ -148,6 +149,11 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
       // Build (or rebuild after compaction) the prior history sent to the LLM.
       // Tracks both the chat-shaped messages and the source records so we can
       // map a slice back to record ids for markCompacted().
+      //
+      // Assistant rows with `toolCalls` are mapped back to OpenAI's `tool_calls`
+      // field; tool rows carry their `tool_call_id` so the LLM can pair them.
+      // Without this shape, the API rejects the request when a tool message
+      // appears without a matching assistant message containing its id.
       async function buildPriorHistory(): Promise<{
         chat: ChatMessage[]
         records: MessageRecord[]
@@ -155,14 +161,36 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
         if (ephemeral || !cid) return { chat: [], records: [] }
         const all = await deps.messageStore.list(cid)
         const eligible = all.filter((m) => !m.compacted && m.id !== userMsgId)
-        const chat: ChatMessage[] = eligible.map((m) => ({
-          role:
+        const chat: ChatMessage[] = eligible.map((m) => {
+          const role: ChatMessage['role'] =
             m.role === 'system-synth'
               ? 'system'
-              : (m.role as ChatMessage['role']),
-          content:
-            typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-        }))
+              : (m.role as ChatMessage['role'])
+          const content =
+            typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+          const msg: ChatMessage = { role, content }
+          if (role === 'assistant' && m.toolCalls && m.toolCalls.length) {
+            msg.tool_calls = m.toolCalls.map((tc) => ({
+              id: tc.id,
+              type: 'function' as const,
+              function: {
+                name: tc.name,
+                arguments:
+                  typeof tc.input === 'string'
+                    ? tc.input
+                    : JSON.stringify(tc.input ?? {}),
+              },
+            }))
+          }
+          if (role === 'tool' && m.toolCallId) {
+            msg.tool_call_id = m.toolCallId
+            // Truncate the LLM-facing copy of the tool result so a single
+            // bloated past tool call doesn't keep eating tokens on every
+            // subsequent turn. The original full content stays in IDB.
+            msg.content = truncateForLLM(content, settings.toolMaxOutputChars)
+          }
+          return msg
+        })
         return { chat, records: eligible }
       }
 
@@ -293,62 +321,110 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
         toolContext,
         toolMaxIterations: settings.toolMaxIterations,
         systemPrompt,
+        toolMaxOutputChars: settings.toolMaxOutputChars,
       })
 
       onAbortable?.(() => agent.cancel())
 
-      const assistantCreatedAt = Date.now()
-      const assistantMsgId = ephemeral
-        ? crypto.randomUUID()
-        : (
-            await deps.messageStore.append({
-              conversationId: cid!,
-              role: 'assistant',
-              content: '',
-              pending: true,
-            })
-          ).id
-      const assistantMsg = { id: assistantMsgId, createdAt: assistantCreatedAt }
+      // Per-iteration row management. We append assistant rows lazily — the
+      // first streamChunk of an iteration triggers an append; the iter's
+      // assistant/iter event finalizes that row with the iteration's tool
+      // calls. Empty-text iterations (the LLM only produced tool_calls) get a
+      // row at iter time so the OpenAI replay shape is correct on the next
+      // turn (a tool message must immediately follow the assistant message
+      // that holds the matching tool_calls).
+      let currentPendingId: string | null = null
+      let currentPendingCreatedAt = 0
+      let lastAssistantId: string | null = null
 
-      // Empty pending placeholder so UIs can anchor tool/start cards even when
-      // the model calls a tool before producing any assistant text.
-      deps.emit({
-        id: crypto.randomUUID(),
-        sessionId: cmd.sessionId,
-        ts: Date.now(),
-        kind: 'message/appended',
-        message: {
-          id: assistantMsg.id,
-          role: 'assistant',
-          content: '',
-          createdAt: assistantMsg.createdAt,
-          pending: true,
-        },
-      })
+      async function openAssistantRow(): Promise<{ id: string; createdAt: number }> {
+        const createdAt = Date.now()
+        const id = ephemeral
+          ? crypto.randomUUID()
+          : (
+              await deps.messageStore.append({
+                conversationId: cid!,
+                role: 'assistant',
+                content: '',
+                pending: true,
+              })
+            ).id
+        currentPendingId = id
+        currentPendingCreatedAt = createdAt
+        lastAssistantId = id
+        deps.emit({
+          id: crypto.randomUUID(),
+          sessionId: cmd.sessionId,
+          ts: Date.now(),
+          kind: 'message/appended',
+          message: { id, role: 'assistant', content: '', createdAt, pending: true },
+        })
+        return { id, createdAt }
+      }
+
+      async function finalizeAssistantRow(
+        text: string,
+        toolCalls: Array<{ id: string; name: string; input?: unknown }>,
+      ): Promise<void> {
+        // If the iteration produced 0 streamChunks (tool-call-only iter), open
+        // a row now so the iteration is still represented in storage.
+        if (!currentPendingId) await openAssistantRow()
+        const id = currentPendingId!
+        const createdAt = currentPendingCreatedAt
+        if (!ephemeral) {
+          await deps.messageStore.update(id, {
+            content: text,
+            pending: false,
+            ...(toolCalls.length ? { toolCalls } : {}),
+          })
+        }
+        deps.emit({
+          id: crypto.randomUUID(),
+          sessionId: cmd.sessionId,
+          ts: Date.now(),
+          kind: 'message/appended',
+          message: {
+            id,
+            role: 'assistant',
+            content: text,
+            createdAt,
+            pending: false,
+          },
+        })
+        currentPendingId = null
+      }
 
       try {
         for await (const ev of agent.send(cmd.text, {
           history: priorHistory,
         }) as AsyncIterable<CoreAgentEvent>) {
           if (ev.kind === 'message/streamChunk') {
+            if (!currentPendingId) await openAssistantRow()
             deps.emit({
               id: crypto.randomUUID(),
               sessionId: cmd.sessionId,
               ts: Date.now(),
               kind: 'message/streamChunk',
-              messageId: assistantMsg.id,
+              messageId: currentPendingId!,
               delta: ev.delta,
             })
+          } else if (ev.kind === 'assistant/iter') {
+            await finalizeAssistantRow(ev.text, ev.toolCalls)
           } else if (ev.kind === 'usage') {
-            deps.emit({
-              id: crypto.randomUUID(),
-              sessionId: cmd.sessionId,
-              ts: Date.now(),
-              kind: 'message/usage',
-              messageId: assistantMsg.id,
-              input: ev.input,
-              output: ev.output,
-            })
+            // Anchor on the just-finalized assistant row so the UI's context
+            // bar updates against the iteration that actually consumed those
+            // tokens. lastAssistantId is set by openAssistantRow().
+            if (lastAssistantId) {
+              deps.emit({
+                id: crypto.randomUUID(),
+                sessionId: cmd.sessionId,
+                ts: Date.now(),
+                kind: 'message/usage',
+                messageId: lastAssistantId,
+                input: ev.input,
+                output: ev.output,
+              })
+            }
           } else if (ev.kind === 'tool/start') {
             deps.emit({
               id: crypto.randomUUID(),
@@ -358,6 +434,28 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
               toolCall: ev.toolCall,
             })
           } else if (ev.kind === 'tool/end') {
+            // Persist the tool result as its own row so future turns can
+            // replay it back to the LLM in canonical OpenAI shape.
+            if (!ephemeral) {
+              const toolRow = await deps.messageStore.append({
+                conversationId: cid!,
+                role: 'tool',
+                content: ev.result.content ?? '',
+                toolCallId: ev.toolCallId,
+              })
+              deps.emit({
+                id: crypto.randomUUID(),
+                sessionId: cmd.sessionId,
+                ts: Date.now(),
+                kind: 'message/appended',
+                message: {
+                  id: toolRow.id,
+                  role: 'tool',
+                  content: ev.result.content ?? '',
+                  createdAt: toolRow.createdAt,
+                },
+              })
+            }
             deps.emit({
               id: crypto.randomUUID(),
               sessionId: cmd.sessionId,
@@ -367,25 +465,13 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
               result: ev.result,
             })
           } else if (ev.kind === 'done') {
-            if (!ephemeral) {
-              await deps.messageStore.update(assistantMsg.id, {
-                content: ev.assistantText,
-                pending: false,
-              })
+            // Defensive: if a final pending row somehow survived (no
+            // assistant/iter ever closed it — shouldn't happen with the
+            // current QueryEngine, but error paths are weird), close it now
+            // with the accumulated assistantText.
+            if (currentPendingId) {
+              await finalizeAssistantRow(ev.assistantText, [])
             }
-            deps.emit({
-              id: crypto.randomUUID(),
-              sessionId: cmd.sessionId,
-              ts: Date.now(),
-              kind: 'message/appended',
-              message: {
-                id: assistantMsg.id,
-                role: 'assistant',
-                content: ev.assistantText,
-                createdAt: assistantMsg.createdAt,
-                pending: false,
-              },
-            })
           }
         }
       } catch (e: any) {

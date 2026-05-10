@@ -16,6 +16,8 @@ export interface CreateAgentOptions<ExtraCtx = Record<string, never>> {
   toolContext: ExtraCtx
   systemPrompt?: string
   toolMaxIterations?: number
+  /** Forwarded to QueryEngine — see QueryEngineOptions.toolMaxOutputChars. */
+  toolMaxOutputChars?: number
 }
 
 export function createAgent<ExtraCtx>(opts: CreateAgentOptions<ExtraCtx>): AgentSession<ExtraCtx> {
@@ -31,5 +33,6 @@ export function createAgent<ExtraCtx>(opts: CreateAgentOptions<ExtraCtx>): Agent
     toolContext: opts.toolContext,
     systemPrompt: opts.systemPrompt,
     toolMaxIterations: opts.toolMaxIterations,
+    toolMaxOutputChars: opts.toolMaxOutputChars,
   })
 }

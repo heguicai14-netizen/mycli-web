@@ -117,9 +117,16 @@ export function bootKernelOffscreen(opts: BootKernelOffscreenOptions): void {
         activeAborts.clear()
         return
       case 'chat/newConversation':
-        // Default: messageStore.activeConversationId() lazy-creates on the
-        // next turn. Consumers wanting explicit creation can wrap their
-        // messageStore.
+        await handleNewConversation(cmd.sessionId, cmd.title)
+        return
+      case 'chat/loadConversation':
+        await handleLoadConversation(cmd.sessionId, cmd.conversationId)
+        return
+      case 'chat/listConversations':
+        await pushConversationsList(cmd.sessionId)
+        return
+      case 'chat/deleteConversation':
+        await handleDeleteConversation(cmd.sessionId, cmd.conversationId)
         return
       case 'chat/resubscribe':
         await pushSnapshot(cmd.sessionId, cmd.conversationId)
@@ -130,6 +137,58 @@ export function bootKernelOffscreen(opts: BootKernelOffscreenOptions): void {
       default:
         return
     }
+  }
+
+  async function handleNewConversation(
+    sessionId: string,
+    title?: string,
+  ): Promise<void> {
+    if (typeof opts.messageStore.createConversation !== 'function') {
+      // Adapter doesn't support explicit creation — push current snapshot so
+      // the UI at least clears coherently when "New chat" is clicked.
+      await pushSnapshot(sessionId)
+      return
+    }
+    await opts.messageStore.createConversation({ title })
+    await pushSnapshot(sessionId)
+    await pushConversationsList(sessionId)
+  }
+
+  async function handleLoadConversation(
+    sessionId: string,
+    conversationId: string,
+  ): Promise<void> {
+    if (typeof opts.messageStore.setActiveConversationId === 'function') {
+      await opts.messageStore.setActiveConversationId(conversationId)
+    }
+    await pushSnapshot(sessionId, conversationId)
+    await pushConversationsList(sessionId)
+  }
+
+  async function handleDeleteConversation(
+    sessionId: string,
+    conversationId: string,
+  ): Promise<void> {
+    if (typeof opts.messageStore.deleteConversation !== 'function') return
+    await opts.messageStore.deleteConversation(conversationId)
+    // Whichever conversation is now active (per the adapter's policy — usually
+    // the next-most-recent) becomes the snapshot we push back.
+    await pushSnapshot(sessionId)
+    await pushConversationsList(sessionId)
+  }
+
+  async function pushConversationsList(sessionId: string): Promise<void> {
+    if (typeof opts.messageStore.listConversations !== 'function') return
+    const list = await opts.messageStore.listConversations()
+    const activeId = await opts.messageStore.activeConversationId()
+    emit({
+      id: crypto.randomUUID(),
+      sessionId,
+      ts: Date.now(),
+      kind: 'conversations/list',
+      activeId,
+      conversations: list,
+    })
   }
 
   async function runChat(cmd: {

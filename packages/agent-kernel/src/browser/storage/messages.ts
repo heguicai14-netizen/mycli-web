@@ -9,7 +9,8 @@ export async function appendMessage(input: {
   conversationId: ConversationId
   role: Role
   content: unknown
-  toolCalls?: unknown[]
+  toolCalls?: Array<{ id: string; name: string; input?: unknown }>
+  toolCallId?: string
   toolResults?: unknown[]
   pending?: boolean
   subAgentId?: string
@@ -31,6 +32,7 @@ export async function appendMessage(input: {
     role: input.role,
     content: input.content,
     toolCalls: input.toolCalls,
+    toolCallId: input.toolCallId,
     toolResults: input.toolResults,
     createdAt: Date.now(),
     compacted: false,

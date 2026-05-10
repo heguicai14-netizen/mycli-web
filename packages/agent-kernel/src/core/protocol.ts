@@ -50,6 +50,22 @@ const Usage = z.object({
   output: z.number().int().nonnegative(),
 })
 
+// Per-iteration assistant message boundary. Each LLM completion within a
+// multi-iteration turn yields one of these so consumers can persist a
+// dedicated assistant row (with the iteration's tool calls) before the
+// next iteration starts.
+const AssistantIter = z.object({
+  kind: z.literal('assistant/iter'),
+  text: z.string(),
+  toolCalls: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      input: z.unknown(),
+    }),
+  ),
+})
+
 // Auto-compaction lifecycle. Emitted by the orchestrator (not QueryEngine) when
 // the history exceeds the configured threshold and a summarization pass starts /
 // finishes. UI consumers use these to render a "Compacting…" status banner.
@@ -79,6 +95,7 @@ export const AgentEvent = z.discriminatedUnion('kind', [
   Done,
   FatalError,
   Usage,
+  AssistantIter,
   CompactStarted,
   CompactCompleted,
   CompactFailed,

@@ -3,6 +3,7 @@ import type {
   ChatMessage,
 } from './OpenAICompatibleClient'
 import type { ToolCall, ToolResult } from './types'
+import { truncateForLLM } from './truncate'
 
 export type EngineEvent =
   | { kind: 'assistant_delta'; text: string }
@@ -30,6 +31,13 @@ export interface QueryEngineOptions {
   toolMaxIterations?: number
   systemPrompt?: string
   signal?: AbortSignal
+  /**
+   * Cap on tool result content (chars) inserted back into the LLM history
+   * within the same turn. Full content is still surfaced via the
+   * `tool_result` event for persistence/UI; only the LLM's view is truncated.
+   * Undefined → no truncation.
+   */
+  toolMaxOutputChars?: number
 }
 
 export class QueryEngine {
@@ -117,10 +125,14 @@ export class QueryEngine {
             ? result.data
             : JSON.stringify(result.data)
           : JSON.stringify(result.error)
+        // The LLM-facing copy is truncated to keep one runaway tool call from
+        // blowing the next iteration's prompt. The persistence/UI copy
+        // (yielded below) stays full so users can still inspect everything.
+        const llmContent = truncateForLLM(content, this.opts.toolMaxOutputChars)
         history.push({
           role: 'tool',
           tool_call_id: call.id,
-          content,
+          content: llmContent,
         })
         yield {
           kind: 'tool_result',

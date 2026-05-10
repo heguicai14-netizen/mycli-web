@@ -20,7 +20,15 @@ export interface MessageRow {
   seq: number
   role: 'user' | 'assistant' | 'tool' | 'system-synth'
   content: unknown
-  toolCalls?: unknown[]
+  /** Set on assistant rows that produced tool calls in this iteration. Each
+   *  entry mirrors the agent-core ToolCall shape so the row can be replayed
+   *  back into the OpenAI chat format on the next turn. */
+  toolCalls?: Array<{ id: string; name: string; input?: unknown }>
+  /** Set on tool rows: the id of the assistant tool_call this row answers.
+   *  Required by OpenAI for proper pairing in chat completions. */
+  toolCallId?: string
+  /** Legacy/unused. Retained to keep the schema additive — tool results live
+   *  in dedicated tool rows now (one row per result), not embedded here. */
   toolResults?: unknown[]
   createdAt: number
   compacted: boolean

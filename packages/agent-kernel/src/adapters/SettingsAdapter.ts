@@ -23,6 +23,14 @@ export interface Settings {
   model: string
   systemPromptAddendum?: string
   toolMaxIterations?: number
+  /**
+   * Cap on tool result content (in characters) sent to the LLM. The full
+   * content is still persisted to IndexedDB and shown in the UI — only the
+   * LLM-facing replay is truncated. Protects against runaway prompt costs and
+   * single-call context overflow when tools return large pages or JSON.
+   * Undefined → no truncation. Default in mycli-web: 50000.
+   */
+  toolMaxOutputChars?: number
   autoCompact?: AutoCompactSettings
 }
 

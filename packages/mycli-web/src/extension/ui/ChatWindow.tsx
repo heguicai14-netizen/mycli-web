@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { MessageList, type DisplayMessage, type DisplayToolCall } from './MessageList'
 import { Composer } from './Composer'
+import { ConversationList, type ConversationItem } from './ConversationList'
 
 interface ErrorBanner {
   text: string
@@ -23,6 +25,10 @@ interface Props {
     | { phase: 'done'; messages: number; saved: number }
     | { phase: 'failed'; reason: string }
     | null
+  conversations: ConversationItem[]
+  activeConversationId: string | null
+  onSelectConversation: (id: string) => void
+  onDeleteConversation: (id: string) => void
 }
 
 function formatTokens(n: number): string {
@@ -97,14 +103,42 @@ export function ChatWindow({
   contextLimit,
   contextThresholdPercent,
   compactStatus,
+  conversations,
+  activeConversationId,
+  onSelectConversation,
+  onDeleteConversation,
 }: Props) {
+  const [listOpen, setListOpen] = useState(false)
   return (
     <div
       className="fixed right-4 bottom-20 flex h-[32rem] w-96 flex-col rounded-lg border border-slate-200 bg-white shadow-xl"
       style={{ zIndex: 2147483647 }}
+      onClick={() => listOpen && setListOpen(false)}
     >
-      <div className="flex h-10 items-center justify-between border-b border-slate-200 px-3 text-sm font-semibold text-slate-700">
-        <span>mycli-web</span>
+      <div className="relative flex h-10 items-center justify-between border-b border-slate-200 px-3 text-sm font-semibold text-slate-700">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            setListOpen((v) => !v)
+          }}
+          className="-ml-1 flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-slate-100"
+          aria-label="Open conversation list"
+          title="Switch conversation"
+        >
+          <span className="text-base leading-none">≡</span>
+          <span>mycli-web</span>
+        </button>
+        {listOpen && (
+          <ConversationList
+            conversations={conversations}
+            activeId={activeConversationId}
+            onSelect={onSelectConversation}
+            onDelete={onDeleteConversation}
+            onNew={onNewConversation}
+            onClose={() => setListOpen(false)}
+          />
+        )}
         <div className="flex items-center gap-3">
           <ContextBar
             used={contextTokens}

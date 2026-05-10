@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Fab } from './fab'
 import { ChatWindow } from '../ui/ChatWindow'
 import type { DisplayMessage, DisplayToolCall } from '../ui/MessageList'
+import type { ConversationItem } from '../ui/ConversationList'
 import { RpcClient } from 'agent-kernel'
 import { getTransientUi, setTransientUi } from '../storage/transient'
 import { loadSettings } from '../storage/settings'
@@ -27,6 +28,8 @@ export function ChatApp() {
     | null
   >(null)
   const compactHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [conversations, setConversations] = useState<ConversationItem[]>([])
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const clientRef = useRef<RpcClient | null>(null)
   const lastAssistantIdRef = useRef<string | null>(null)
 
@@ -78,14 +81,21 @@ export function ChatApp() {
       client.on('state/snapshot', (ev: any) => {
         // Replace local message/toolCall state with server snapshot. Triggered
         // either by our explicit chat/resubscribe below or by offscreen on its
-        // own (e.g., conversation switch in the future).
+        // own (conversation switch / new / delete).
         const snap = ev.conversation
-        const newMessages: DisplayMessage[] = (snap.messages ?? []).map((m: any) => ({
-          id: m.id,
-          role: m.role === 'system-synth' ? 'assistant' : m.role,
-          content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-          pending: !!m.pending,
-        }))
+        setActiveConversationId(snap.id ?? null)
+        const newMessages: DisplayMessage[] = (snap.messages ?? [])
+          // Tool rows live in IndexedDB so future turns can replay them, but
+          // the chat list already shows tool activity via ToolCallCard cards
+          // anchored to the assistant message — rendering them as messages
+          // would duplicate.
+          .filter((m: any) => m.role !== 'tool')
+          .map((m: any) => ({
+            id: m.id,
+            role: m.role === 'system-synth' ? 'assistant' : m.role,
+            content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+            pending: !!m.pending,
+          }))
         setMessages(newMessages)
         // Snapshots don't carry tool calls (Plan B doesn't persist them yet);
         // clear local cache to avoid stale cards from a previous turn.
@@ -101,6 +111,9 @@ export function ChatApp() {
 
       client.on('message/appended', (ev: any) => {
         const msg = ev.message
+        // Tool rows are persisted but not rendered in the message list — the
+        // ToolCallCard handles their display.
+        if (msg.role === 'tool') return
         const isPending = !!msg.pending
         setMessages((prev) => {
           if (prev.find((p) => p.id === msg.id)) {
@@ -146,6 +159,17 @@ export function ChatApp() {
           // emitted at runChat start carries pending: true and must NOT clear it).
           if (!isPending) setBusy(false)
         }
+      })
+
+      client.on('conversations/list', (ev: any) => {
+        setConversations(
+          (ev.conversations ?? []).map((c: any) => ({
+            id: c.id,
+            title: c.title,
+            updatedAt: c.updatedAt,
+          })),
+        )
+        setActiveConversationId(ev.activeId ?? null)
       })
 
       client.on('compact/started', (ev: any) => {
@@ -245,6 +269,12 @@ export function ChatApp() {
       } catch (e) {
         console.warn('[mycli-web] chat/resubscribe failed:', e)
       }
+      // Pull the conversation list so the switcher menu has data.
+      try {
+        await client.send({ kind: 'chat/listConversations' })
+      } catch (e) {
+        console.warn('[mycli-web] chat/listConversations failed:', e)
+      }
 
       const tabListener = (msg: any) => {
         if (msg?.kind === 'content/activate') setOpen(true)
@@ -312,8 +342,7 @@ export function ChatApp() {
     setBusy(false)
   }
 
-  function newConversation() {
-    if (!clientRef.current) return
+  function resetTurnState() {
     setMessages([])
     setToolCalls([])
     lastAssistantIdRef.current = null
@@ -325,7 +354,28 @@ export function ChatApp() {
     }
     setBusy(false)
     setErrorBanner(undefined)
+  }
+
+  function newConversation() {
+    if (!clientRef.current) return
+    resetTurnState()
     clientRef.current.send({ kind: 'chat/newConversation' })
+  }
+
+  function selectConversation(id: string) {
+    if (!clientRef.current) return
+    if (id === activeConversationId) return
+    resetTurnState()
+    clientRef.current.send({ kind: 'chat/loadConversation', conversationId: id })
+  }
+
+  function deleteConversation(id: string) {
+    if (!clientRef.current) return
+    // If we're deleting the currently shown one, clear local state so the
+    // post-delete snapshot (whichever conversation becomes active) renders
+    // cleanly without flashing the deleted one's leftover messages.
+    if (id === activeConversationId) resetTurnState()
+    clientRef.current.send({ kind: 'chat/deleteConversation', conversationId: id })
   }
 
   function dismissError(action?: { kind: 'open-options' }) {
@@ -356,6 +406,10 @@ export function ChatApp() {
           contextLimit={contextLimit}
           contextThresholdPercent={contextThresholdPercent}
           compactStatus={compactStatus}
+          conversations={conversations}
+          activeConversationId={activeConversationId}
+          onSelectConversation={selectConversation}
+          onDeleteConversation={deleteConversation}
         />
       )}
     </>

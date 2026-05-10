@@ -7,6 +7,11 @@ export const Settings = z.object({
   systemPromptAddendum: z.string().default(''),
   subAgentMaxDepth: z.number().int().min(0).max(10).default(3),
   toolMaxIterations: z.number().int().min(1).max(500).default(50),
+  // Cap on tool result content sent to the LLM (chars). 0 = no cap.
+  // 50000 chars ≈ 12.5k tokens — covers most real-world page reads (so the
+  // LLM rarely needs to re-fetch for follow-up detail questions) while still
+  // protecting against runaway 200KB+ payloads.
+  toolMaxOutputChars: z.number().int().min(0).max(1_000_000).default(50_000),
   fab: z
     .object({
       enabled: z.boolean().default(true),

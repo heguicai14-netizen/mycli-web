@@ -6,6 +6,7 @@ export { ToolRegistry } from './ToolRegistry'
 export { toOpenAiTool, makeOk, makeError } from './Tool'
 export { fetchGetTool } from './tools/fetchGet'
 export { compactMessages, type CompactInput } from './compactor'
+export { truncateForLLM } from './truncate'
 export { AgentEvent } from './protocol'
 export type {
   ToolDefinition,

@@ -324,6 +324,304 @@ describe('agentService.runTurn', () => {
     expect(fake.cancelled.value).toBe(true)
   })
 
+  // ---------- Tool result truncation ----------
+
+  it('buildPriorHistory truncates large tool rows for the LLM but not in IDB', async () => {
+    const big = 'X'.repeat(50_000)
+    const history = [
+      { id: 'u1', role: 'user', content: 'q', compacted: false },
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        compacted: false,
+        toolCalls: [{ id: 'c1', name: 'readPage', input: {} }],
+      },
+      {
+        id: 't1',
+        role: 'tool',
+        content: big,
+        compacted: false,
+        toolCallId: 'c1',
+      },
+      { id: 'a2', role: 'assistant', content: 'short', compacted: false },
+    ]
+    let capturedHistory: any[] = []
+    const fake = makeFakeAgent([
+      { kind: 'message/streamChunk', delta: 'ok' },
+      { kind: 'done', stopReason: 'end_turn', assistantText: 'ok' },
+    ])
+    const session = {
+      send: (_text: string, opts: any) => {
+        capturedHistory = opts.history
+        return fake.session.send()
+      },
+      cancel: fake.session.cancel,
+    }
+    const deps: any = {
+      settings: {
+        load: async () =>
+          defaultSettings({ toolMaxOutputChars: 1000 }),
+      },
+      emit: () => {},
+      messageStore: {
+        append: vi.fn(async () => ({ id: 'new', createdAt: 999 })),
+        list: vi.fn(async () => history),
+        update: vi.fn(async () => {}),
+        activeConversationId: vi.fn(async () => 'conv-1'),
+        markCompacted: vi.fn(async () => {}),
+      },
+      toolContext: {
+        build: async () => ({
+          rpc: { domOp: vi.fn(), chromeApi: vi.fn() },
+          tabId: 99,
+          conversationId: 'conv-1',
+        }),
+      },
+      createAgent: () => session as any,
+    }
+    const svc = createAgentService(deps)
+    await svc.runTurn({ sessionId: 's1', text: 'next' })
+
+    // Tool message in the history sent to LLM is truncated.
+    const toolMsg = capturedHistory.find((m) => m.role === 'tool')
+    expect(toolMsg).toBeDefined()
+    expect(toolMsg.content.length).toBeLessThan(big.length)
+    expect(toolMsg.content).toContain('truncated by mycli-web')
+    expect(toolMsg.content).toContain('original was 50000 chars')
+    // IDB row content remains untouched (proxy: messageStore.list still
+    // returns the full content; we never mutated it).
+    expect(history[2].content).toBe(big)
+  })
+
+  it('buildPriorHistory leaves tool rows alone when toolMaxOutputChars is 0 or undefined', async () => {
+    const big = 'Y'.repeat(20_000)
+    const history = [
+      { id: 'u1', role: 'user', content: 'q', compacted: false },
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        compacted: false,
+        toolCalls: [{ id: 'c1', name: 'fetchGet', input: {} }],
+      },
+      { id: 't1', role: 'tool', content: big, compacted: false, toolCallId: 'c1' },
+    ]
+    let capturedHistory: any[] = []
+    const fake = makeFakeAgent([
+      { kind: 'done', stopReason: 'end_turn', assistantText: '' },
+    ])
+    const session = {
+      send: (_text: string, opts: any) => {
+        capturedHistory = opts.history
+        return fake.session.send()
+      },
+      cancel: fake.session.cancel,
+    }
+    const deps: any = {
+      settings: { load: async () => defaultSettings({ toolMaxOutputChars: 0 }) },
+      emit: () => {},
+      messageStore: {
+        append: vi.fn(async () => ({ id: 'new', createdAt: 999 })),
+        list: vi.fn(async () => history),
+        update: vi.fn(async () => {}),
+        activeConversationId: vi.fn(async () => 'conv-1'),
+        markCompacted: vi.fn(async () => {}),
+      },
+      toolContext: {
+        build: async () => ({
+          rpc: { domOp: vi.fn(), chromeApi: vi.fn() },
+          tabId: 99,
+          conversationId: 'conv-1',
+        }),
+      },
+      createAgent: () => session as any,
+    }
+    const svc = createAgentService(deps)
+    await svc.runTurn({ sessionId: 's1', text: 'next' })
+    const toolMsg = capturedHistory.find((m: any) => m.role === 'tool')
+    expect(toolMsg.content).toBe(big)
+    expect(toolMsg.content).not.toContain('truncated')
+  })
+
+  it('forwards toolMaxOutputChars through createAgent so QueryEngine sees it', async () => {
+    const captured = { current: undefined as any }
+    const { deps } = makeDeps({
+      settings: defaultSettings({ toolMaxOutputChars: 5000 }),
+      capturedAgentOpts: captured,
+    })
+    const svc = createAgentService(deps as any)
+    await svc.runTurn({ sessionId: 's1', text: 'hi', ephemeral: true })
+    expect(captured.current.toolMaxOutputChars).toBe(5000)
+  })
+
+  // ---------- Tool persistence ----------
+
+  it('persists multi-iteration turn as separate assistant + tool rows with toolCalls/toolCallId', async () => {
+    const events: any[] = []
+    const appended: any[] = []
+    const updated: Array<{ id: string; patch: any }> = []
+    const live: any[] = []
+
+    const messageStore = {
+      append: vi.fn(async (msg: any) => {
+        const id = `m-${appended.length + 1}`
+        appended.push({ ...msg, id })
+        live.push({ ...msg, id, compacted: false })
+        return { id, createdAt: 1000 + appended.length }
+      }),
+      list: vi.fn(async () => live),
+      update: vi.fn(async (id: string, patch: any) => {
+        updated.push({ id, patch })
+        const row = live.find((m) => m.id === id)
+        if (row) Object.assign(row, patch)
+      }),
+      activeConversationId: vi.fn(async () => 'conv-1'),
+      markCompacted: vi.fn(async () => {}),
+    }
+
+    const fake = makeFakeAgent([
+      // iter 1: empty text + a tool call
+      { kind: 'assistant/iter', text: '', toolCalls: [{ id: 'c1', name: 'readPage', input: { selector: 'h1' } }] } as any,
+      { kind: 'tool/start', toolCall: { id: 'c1', tool: 'readPage', args: { selector: 'h1' } } },
+      { kind: 'tool/end', toolCallId: 'c1', result: { ok: true, content: '<h1>Hello</h1>' } },
+      // iter 2: final assistant text, no tool calls
+      { kind: 'message/streamChunk', delta: 'The page title is Hello.' },
+      { kind: 'assistant/iter', text: 'The page title is Hello.', toolCalls: [] } as any,
+      { kind: 'done', stopReason: 'end_turn', assistantText: 'The page title is Hello.' },
+    ])
+
+    const deps: any = {
+      settings: { load: async () => defaultSettings() },
+      emit: (ev: any) => events.push(ev),
+      messageStore,
+      toolContext: {
+        build: async () => ({
+          rpc: { domOp: vi.fn(), chromeApi: vi.fn() },
+          tabId: 99,
+          conversationId: 'conv-1',
+        }),
+      },
+      createAgent: () => fake.session as any,
+    }
+
+    const svc = createAgentService(deps)
+    await svc.runTurn({ sessionId: 's1', text: 'what is the page title' })
+
+    // Storage shape:
+    //  m-1 user
+    //  m-2 assistant (iter 1, empty text, toolCalls=[c1])
+    //  m-3 tool (toolCallId=c1)
+    //  m-4 assistant (iter 2, "The page title is Hello.", no toolCalls)
+    const userRow = appended.find((r) => r.role === 'user')
+    expect(userRow).toBeDefined()
+
+    const assistantRows = appended.filter((r) => r.role === 'assistant')
+    expect(assistantRows).toHaveLength(2)
+
+    const toolRows = appended.filter((r) => r.role === 'tool')
+    expect(toolRows).toHaveLength(1)
+    expect(toolRows[0].toolCallId).toBe('c1')
+    expect(toolRows[0].content).toBe('<h1>Hello</h1>')
+
+    // First assistant row was finalized via update() to include the tool call.
+    const iter1Update = updated.find(
+      (u) => u.patch.toolCalls && u.patch.toolCalls.length > 0,
+    )
+    expect(iter1Update).toBeDefined()
+    expect(iter1Update!.patch.toolCalls[0].id).toBe('c1')
+    expect(iter1Update!.patch.toolCalls[0].name).toBe('readPage')
+    expect(iter1Update!.patch.pending).toBe(false)
+
+    // Wire: tool row is emitted as message/appended too (so snapshots replay it
+    // even though the chat UI filters it out).
+    const toolAppendedEv = events.find(
+      (e) => e.kind === 'message/appended' && e.message.role === 'tool',
+    )
+    expect(toolAppendedEv).toBeDefined()
+    expect(toolAppendedEv.message.content).toBe('<h1>Hello</h1>')
+  })
+
+  it('buildPriorHistory maps assistant.toolCalls and tool.toolCallId to OpenAI ChatMessage shape', async () => {
+    const events: any[] = []
+    // History from a previous turn: user → assistant(text + toolCalls) → tool result → assistant(final)
+    const history = [
+      { id: 'u1', role: 'user', content: 'find the title', compacted: false },
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        compacted: false,
+        toolCalls: [{ id: 'c1', name: 'readPage', input: { selector: 'h1' } }],
+      },
+      {
+        id: 't1',
+        role: 'tool',
+        content: '<h1>Hello</h1>',
+        compacted: false,
+        toolCallId: 'c1',
+      },
+      { id: 'a2', role: 'assistant', content: 'The title is Hello.', compacted: false },
+    ]
+    let capturedHistory: any[] = []
+    const fake = makeFakeAgent([
+      { kind: 'message/streamChunk', delta: 'ok' },
+      { kind: 'done', stopReason: 'end_turn', assistantText: 'ok' },
+    ])
+    const session = {
+      send: (_text: string, opts: any) => {
+        capturedHistory = opts.history
+        return fake.session.send()
+      },
+      cancel: fake.session.cancel,
+    }
+    const deps: any = {
+      settings: { load: async () => defaultSettings() },
+      emit: (ev: any) => events.push(ev),
+      messageStore: {
+        append: vi.fn(async (msg: any) => ({ id: 'new', createdAt: 999 })),
+        list: vi.fn(async () => history),
+        update: vi.fn(async () => {}),
+        activeConversationId: vi.fn(async () => 'conv-1'),
+        markCompacted: vi.fn(async () => {}),
+      },
+      toolContext: {
+        build: async () => ({
+          rpc: { domOp: vi.fn(), chromeApi: vi.fn() },
+          tabId: 99,
+          conversationId: 'conv-1',
+        }),
+      },
+      createAgent: () => session as any,
+    }
+    const svc = createAgentService(deps)
+    await svc.runTurn({ sessionId: 's1', text: 'next question' })
+
+    // Captured history sent to LLM should mirror OpenAI's expected shape:
+    //   user, assistant(with tool_calls), tool(with tool_call_id), assistant
+    expect(capturedHistory).toHaveLength(4)
+    expect(capturedHistory[0]).toMatchObject({ role: 'user', content: 'find the title' })
+
+    expect(capturedHistory[1].role).toBe('assistant')
+    expect(capturedHistory[1].tool_calls).toBeDefined()
+    expect(capturedHistory[1].tool_calls[0].id).toBe('c1')
+    expect(capturedHistory[1].tool_calls[0].type).toBe('function')
+    expect(capturedHistory[1].tool_calls[0].function.name).toBe('readPage')
+    expect(JSON.parse(capturedHistory[1].tool_calls[0].function.arguments)).toEqual({
+      selector: 'h1',
+    })
+
+    expect(capturedHistory[2].role).toBe('tool')
+    expect(capturedHistory[2].tool_call_id).toBe('c1')
+    expect(capturedHistory[2].content).toBe('<h1>Hello</h1>')
+
+    expect(capturedHistory[3]).toMatchObject({
+      role: 'assistant',
+      content: 'The title is Hello.',
+    })
+    expect(capturedHistory[3].tool_calls).toBeUndefined()
+  })
+
   // ---------- Auto-compaction ----------
 
   function compactionScenario(opts: {

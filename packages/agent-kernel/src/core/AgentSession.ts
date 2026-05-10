@@ -10,6 +10,8 @@ export interface AgentSessionOptions<ExtraCtx = Record<string, never>> {
   toolContext: ExtraCtx
   systemPrompt?: string
   toolMaxIterations?: number
+  /** Forwarded to QueryEngine — see QueryEngineOptions.toolMaxOutputChars. */
+  toolMaxOutputChars?: number
 }
 
 export class AgentSession<ExtraCtx = Record<string, never>> {
@@ -60,6 +62,7 @@ export class AgentSession<ExtraCtx = Record<string, never>> {
       toolMaxIterations: this.opts.toolMaxIterations,
       systemPrompt: this.opts.systemPrompt,
       signal: this.abort.signal,
+      toolMaxOutputChars: this.opts.toolMaxOutputChars,
     })
 
     let assistantText = ''
@@ -69,6 +72,16 @@ export class AgentSession<ExtraCtx = Record<string, never>> {
         assistantText += ev.text
         yield { kind: 'message/streamChunk', delta: ev.text }
       } else if (ev.kind === 'assistant_message_complete') {
+        // Surface the iteration boundary so consumers can persist a dedicated
+        // row per LLM completion. Empty-text iterations (the LLM only produced
+        // tool calls) still get a row — needed for OpenAI replay shape where
+        // a `tool` message must immediately follow the assistant message that
+        // contains the matching tool_calls.
+        yield {
+          kind: 'assistant/iter',
+          text: ev.text,
+          toolCalls: ev.toolCalls,
+        }
         if (ev.usage) {
           yield { kind: 'usage', input: ev.usage.in, output: ev.usage.out }
         }

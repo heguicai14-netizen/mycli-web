@@ -14,6 +14,7 @@ export const mycliSettingsAdapter: SettingsAdapter = {
       model: s.model,
       systemPromptAddendum: s.systemPromptAddendum || undefined,
       toolMaxIterations: s.toolMaxIterations,
+      toolMaxOutputChars: s.toolMaxOutputChars,
       autoCompact: s.autoCompact,
     }
   },
