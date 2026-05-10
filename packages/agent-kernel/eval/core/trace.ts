@@ -29,7 +29,7 @@ export async function collectTrace(
   for await (const ev of events) {
     if (ev.kind === 'assistant_message_complete') {
       if (ev.text) trace.steps.push({ kind: 'assistant-message', text: ev.text })
-      trace.finalAnswer = ev.text
+      if (ev.text) trace.finalAnswer = ev.text
       if (ev.usage) {
         trace.tokensIn += ev.usage.in
         trace.tokensOut += ev.usage.out

@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest'
+import type { EngineEvent } from 'agent-kernel'
 import { collectTrace } from '../../../eval/core/trace'
 
-async function* events(...evs: any[]) { for (const e of evs) yield e }
+async function* events(...evs: EngineEvent[]): AsyncGenerator<EngineEvent> {
+  for (const e of evs) yield e
+}
 
 describe('collectTrace', () => {
   it('translates assistant_message_complete + tool_executing + tool_result', async () => {
@@ -67,5 +70,15 @@ describe('collectTrace', () => {
     const result = trace.steps.find((s) => s.kind === 'tool-result') as any
     expect(result.ok).toBe(false)
     expect(result.error).toContain('http 500')
+  })
+
+  it('preserves prior finalAnswer when a trailing empty assistant_message_complete arrives', async () => {
+    const stream = events(
+      { kind: 'assistant_message_complete', text: 'real answer', toolCalls: [], usage: { in: 5, out: 1 } },
+      { kind: 'assistant_message_complete', text: '', toolCalls: [] },
+      { kind: 'done', stopReason: 'end_turn' },
+    )
+    const trace = await collectTrace(stream, 't', 0)
+    expect(trace.finalAnswer).toBe('real answer')
   })
 })
