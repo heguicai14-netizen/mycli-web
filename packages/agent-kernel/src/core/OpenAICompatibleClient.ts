@@ -90,6 +90,10 @@ export class OpenAICompatibleClient {
       messages: req.messages,
     }
     if (req.tools && req.tools.length) body.tools = req.tools
+    // Always request usage stats. OpenAI-compatible endpoints that don't support
+    // stream_options either ignore the key or omit `usage` from the stream — both
+    // are handled (callers see `usage` as undefined). This is required by the eval
+    // harness's efficiency scoring.
     body.stream_options = { include_usage: true }
 
     const timeoutMs = this.cfg.fetchTimeoutMs ?? 60_000
