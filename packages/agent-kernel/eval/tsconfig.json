@@ -1,0 +1,14 @@
+{
+  "extends": "../../mycli-web/tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": ".",
+    "outDir": "../../../node_modules/.cache/tsc/agent-kernel-eval",
+    "tsBuildInfoFile": "../../../node_modules/.cache/tsc/agent-kernel-eval.tsbuildinfo",
+    "types": ["chrome"],
+    "typeRoots": ["../node_modules/@types", "../../../node_modules/@types"]
+  },
+  "references": [{ "path": ".." }],
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules"]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "agent-kernel-eval",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Internal: agent-kernel evaluation harness module."
+}
