@@ -27,3 +27,6 @@ packages/*/src/**/*.tsbuildinfo
 .mycli/
 .idea/
 .vscode/
+.claire/
+.claude/
+.obsidian/
