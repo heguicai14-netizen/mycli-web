@@ -1,0 +1,1 @@
+A landing page titled 'Acme — automate everything' with a hero headline and a Get started call-to-action button.
