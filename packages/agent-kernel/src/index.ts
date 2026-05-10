@@ -87,6 +87,10 @@ export {
   installKernelBackground,
   type InstallKernelBackgroundOptions,
 } from './browser/installKernelBackground'
+export {
+  bootKernelOffscreen,
+  type BootKernelOffscreenOptions,
+} from './browser/bootKernelOffscreen'
 
 // === browser storage (default IDB-backed conversation/message/audit stores) ===
 export {
