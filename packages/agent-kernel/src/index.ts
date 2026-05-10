@@ -1,3 +1,6 @@
+// === error taxonomy ===
+export { ErrorCode, classifyError, type ClassifiedError } from './errors'
+
 // === core: agent loop & 协议（平台无关）===
 export { createAgent, type CreateAgentOptions } from './core/createAgent'
 export { AgentSession } from './core/AgentSession'
