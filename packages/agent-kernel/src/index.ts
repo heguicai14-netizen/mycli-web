@@ -82,6 +82,12 @@ export { sendDomOp, callChromeApi } from './browser/domOpClient'
 export { installDomOpRouter } from './browser/domOpRouter'
 export { polyfillChromeApiInOffscreen } from './browser/offscreenChromePolyfill'
 
+// === browser bootstrap helpers ===
+export {
+  installKernelBackground,
+  type InstallKernelBackgroundOptions,
+} from './browser/installKernelBackground'
+
 // === browser storage (default IDB-backed conversation/message/audit stores) ===
 export {
   openDb,
