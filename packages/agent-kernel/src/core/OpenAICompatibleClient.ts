@@ -58,6 +58,7 @@ export type StreamEvent =
       kind: 'done'
       stopReason: 'stop' | 'tool_calls' | 'length' | 'content_filter' | 'unknown'
       toolCalls?: Array<{ id: string; name: string; input: unknown }>
+      usage?: { in: number; out: number }
     }
 
 import { classifyError } from '../errors'
@@ -89,6 +90,7 @@ export class OpenAICompatibleClient {
       messages: req.messages,
     }
     if (req.tools && req.tools.length) body.tools = req.tools
+    body.stream_options = { include_usage: true }
 
     const timeoutMs = this.cfg.fetchTimeoutMs ?? 60_000
     const timeoutController = timeoutMs > 0 ? new AbortController() : undefined
@@ -137,6 +139,7 @@ export class OpenAICompatibleClient {
     // Accumulator for tool_calls (OpenAI streams them in pieces by index)
     const toolAcc = new Map<number, { id: string; name: string; arguments: string }>()
     let finishReason: string | undefined
+    let usage: { in: number; out: number } | undefined
 
     const reader = res.body.getReader()
     // Abort signal → cancel the reader. Real fetch honors AbortSignal natively, but
@@ -173,6 +176,9 @@ export class OpenAICompatibleClient {
           parsed = JSON.parse(payload)
         } catch {
           continue
+        }
+        if (parsed.usage && typeof parsed.usage.prompt_tokens === 'number') {
+          usage = { in: parsed.usage.prompt_tokens, out: parsed.usage.completion_tokens ?? 0 }
         }
         const choice = parsed?.choices?.[0]
         if (!choice) continue
@@ -226,6 +232,6 @@ export class OpenAICompatibleClient {
       }
       return { id: t.id || crypto.randomUUID(), name: t.name, input }
     })
-    yield { kind: 'done', stopReason: reason, toolCalls: tcs.length ? tcs : undefined }
+    yield { kind: 'done', stopReason: reason, toolCalls: tcs.length ? tcs : undefined, usage }
   }
 }
