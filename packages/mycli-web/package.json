@@ -11,7 +11,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b",
-    "agent:repl": "bun run scripts/agent-repl.ts"
+    "agent:repl": "bun run scripts/agent-repl.ts",
+    "eval": "bun run --bun ../agent-kernel/eval/cli/eval.ts",
+    "eval:smoke": "bun run --bun ../agent-kernel/eval/cli/eval.ts --smoke --replay-from=../agent-kernel/eval/fixtures/replay/latest",
+    "eval:check-regression": "bun run --bun ../agent-kernel/eval/cli/checkRegression.ts"
   },
   "dependencies": {
     "agent-kernel": "workspace:*",
