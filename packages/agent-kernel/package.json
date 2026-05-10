@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "@types/chrome": "^0.0.270",
+    "@types/node": "^25.6.2",
     "fake-indexeddb": "^6.0.0",
     "happy-dom": "^15.0.0",
     "jsdom": "^24.1.0",

@@ -5,7 +5,7 @@
     "rootDir": ".",
     "outDir": "../../../node_modules/.cache/tsc/agent-kernel-eval",
     "tsBuildInfoFile": "../../../node_modules/.cache/tsc/agent-kernel-eval.tsbuildinfo",
-    "types": ["chrome"],
+    "types": ["chrome", "node"],
     "typeRoots": ["../node_modules/@types", "../../../node_modules/@types"]
   },
   "references": [{ "path": ".." }],
