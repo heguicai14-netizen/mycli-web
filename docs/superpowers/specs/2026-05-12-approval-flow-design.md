@@ -5,9 +5,9 @@
 
 ## 概述
 
-让 mycli-web 的 agent 在执行"危险"工具前(由 `ToolDefinition.requiresApproval` 自报)先停下问用户。已有基础设施:wire 协议两个 schema(`approval/requested` / `approval/reply`)、consumer 端完整的 `ApprovalRule` 存储 + `findMatchingRule` 引擎(`packages/mycli-web/src/extension/storage/rules.ts`)。本 spec 填上之间的空白:**kernel 一等的审批协调器(`ApprovalCoordinator`)、可注入的 `ApprovalAdapter` 接口、QueryEngine 边界 gate、以及 Shadow DOM 审批模态**。
+让 mycli-web 的 agent 在执行"危险"工具前(由 `ToolDefinition.requiresApproval` 自报)先停下问用户。已有基础设施:wire 协议两个 schema(`approval/requested` / `approval/reply`)、consumer 端完整的 `ApprovalRule` 存储 + `findMatchingRule` 引擎(`packages/mycli-web/src/extension/storage/rules.ts`)。本 spec 填上之间的空白:**kernel 一等的审批协调器(`ApprovalCoordinator`)、可注入的 `ApprovalAdapter` 接口、QueryEngine 边界 gate、kernel 通用的浏览器上下文构造工具,以及 Shadow DOM 审批模态**。
 
-按 kernel-first 原则:审批是 kernel 一等概念,任何 consumer 提供 adapter 即可获得审批能力。本 spec 在 mycli-web 落地一个 reference adapter,接 rules.ts。
+按 kernel-first 原则:审批是 kernel 一等概念,**任何浏览器插件**(不只是 mycli-web)提供 adapter 即可获得完整审批流。kernel 的 `browser/` 子目录可以用 `chrome.*`(MV3 通用),但不能 import mycli-web 的任何东西。本 spec 在 mycli-web 落地一个 reference adapter 接 rules.ts,作为消费示例。
 
 ## 目标
 
@@ -33,44 +33,50 @@
 
 ## 架构
 
+边界:**kernel core/ 零 chrome 依赖**(generator/coordinator 是纯逻辑);**kernel browser/ 可 chrome.\***(MV3 通用 API,任何浏览器扩展都有);**consumer 包含一切 mycli-web 特定的东西**(rules.ts schema、Shadow DOM 组件、tool 命名等)。
+
 ```
 ┌─ packages/agent-kernel/ ───────────────────────────────────────┐
-│  core/approval.ts(新)                                          │
-│    types:  ApprovalDecision / ApprovalReplyDecision /           │
-│            ApprovalContext / ApprovalRequest / ApprovalAdapter  │
-│    class:  ApprovalCoordinator                                  │
-│  core/types.ts(改)                                              │
-│    ToolDefinition 加 requiresApproval? + summarizeArgs?         │
-│  core/QueryEngine.ts(改)                                        │
-│    构造参数加 approvalCoordinator? + buildApprovalContext? +    │
-│    sessionId;execute 前 gate                                    │
-│  core/AgentSession.ts(改)                                       │
-│    转 EngineEvent.approval_requested → core 'approval/requested'│
-│  core/protocol.ts(改)                                           │
-│    AgentEvent 加 core Approval Zod                              │
-│  browser/agentService.ts(改)                                    │
-│    handle wire 'approval/reply' → coordinator.resolve;         │
-│    构造 QueryEngine 时传 approvalCoordinator + adapter          │
-│  index.ts(改)                                                   │
-│    导出 ApprovalAdapter / ApprovalCoordinator / 等              │
+│ core/(零 chrome / 零 mycli 依赖)                              │
+│   approval.ts(新)                                              │
+│     types:  ApprovalDecision / ApprovalReplyDecision /          │
+│             ApprovalContext / ApprovalRequest / ApprovalAdapter │
+│     class:  ApprovalCoordinator                                 │
+│   types.ts(改)                                                  │
+│     ToolDefinition 加 requiresApproval? + summarizeArgs?        │
+│   QueryEngine.ts(改)                                            │
+│     构造参数加 approvalCoordinator? + buildApprovalContext? +   │
+│     sessionId;execute 前 gate                                   │
+│   protocol.ts(改) AgentEvent 加 core Approval Zod              │
+│                                                                 │
+│ browser/(可 chrome.* — MV3 通用)                              │
+│   activeTabContext.ts(新)                                       │
+│     buildActiveTabApprovalContext() utility — 任何浏览器扩展   │
+│     都需要的"拿当前 active tab origin/url",kernel 复用         │
+│   agentService.ts(改)                                           │
+│     handle wire 'approval/reply' → coordinator.resolve;         │
+│     装配 ApprovalCoordinator,传 adapter + buildApprovalContext │
+│                                                                 │
+│ index.ts(改) 导出 ApprovalAdapter / ApprovalCoordinator /     │
+│   buildActiveTabApprovalContext / 等                            │
 └─────────────────────────────────────────────────────────────────┘
                           ▲ 被引用
                           │
-┌─ packages/mycli-web/src/extension/ ────────────────────────────┐
-│  mycliApprovalAdapter.ts(新)                                    │
-│    接 storage/rules.ts 的 findMatchingRule / addRule            │
-│  approvalContextBuilder.ts(新)                                  │
-│    从当前 tab(SW chrome.tabs API)拿 origin/url;               │
-│    从 args 提 selector(对 querySelector 类工具)               │
-│  ui/ApprovalModal.tsx(新)                                       │
-│    Shadow DOM 内的模态;监听 'approval/requested';            │
-│    4 按钮 → 发 'approval/reply'                                 │
-│  ui/ChatWindow.tsx 或入口(改)                                   │
-│    挂上 ApprovalModal                                           │
-│  agentService 装配处(改)                                        │
-│    把 mycliApprovalAdapter + approvalContextBuilder 传给 kernel │
+┌─ packages/mycli-web/src/extension/(mycli-web specific)──────┐
+│   mycliApprovalAdapter.ts(新)                                   │
+│     接 storage/rules.ts 的 findMatchingRule / addRule           │
+│   approvalContextBuilder.ts(新)                                 │
+│     compose: kernel 的 buildActiveTabApprovalContext() +        │
+│     mycli-web 特定的 selector 提取(从 querySelector 类工具)   │
+│   ui/ApprovalModal.tsx(新)                                      │
+│     Shadow DOM 模态;监听 'approval/requested';              │
+│     4 按钮 → 发 'approval/reply'                                │
+│   ui/ChatWindow.tsx 或入口(改) 挂上 ApprovalModal              │
+│   agentService 装配处(改) 传 mycliApprovalAdapter + builder    │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+**另一个浏览器插件想用 approval flow 时怎么办?** 实现 `ApprovalAdapter`(可用自己的 storage / 自己的 rule schema),实现一个 `buildApprovalContext`(可直接用 kernel 提供的 `buildActiveTabApprovalContext`,也可加自己想要的字段),做自己的 UI 监听 `approval/requested` 事件 → 发 `approval/reply`。**零 fork kernel**。
 
 ## Kernel API 详细设计
 
@@ -278,25 +284,48 @@ export const mycliApprovalAdapter: ApprovalAdapter = {
 }
 ```
 
-### `mycli-web/src/extension/approvalContextBuilder.ts`(新)
+### Kernel 提供的 `buildActiveTabApprovalContext`(`packages/agent-kernel/src/browser/activeTabContext.ts` 新)
 
-在 offscreen 跑,从 chrome.tabs(via `callChromeApi`)拿当前活跃 tab 的 url:
+这是 kernel 提供的 utility,任何浏览器扩展 consumer 都可用:
 
 ```ts
-import { callChromeApi } from 'agent-kernel'
+import { callChromeApi } from './domOpClient'
+import type { ApprovalContext } from '../core/approval'
 
-export async function buildApprovalContext(call: ToolCall): Promise<ApprovalContext> {
+/**
+ * Resolve the active tab's origin + url for use as ApprovalContext.
+ * Returns {} if no active tab — adapter / UI should handle that gracefully.
+ */
+export async function buildActiveTabApprovalContext(): Promise<ApprovalContext> {
   const tabs = await callChromeApi('tabs.query', { active: true, currentWindow: true })
-  const tab = tabs?.[0]
+  const tab = (tabs as Array<{ url?: string }> | undefined)?.[0]
   const url = tab?.url ?? ''
-  const origin = url ? new URL(url).origin : undefined
-  // selector 仅 querySelector / readSelection 类工具携带,从 args 提
-  const selector = (call.input as any)?.selector as string | undefined
-  return { origin, url, ...(selector ? { selector } : {}) }
+  if (!url) return {}
+  let origin: string | undefined
+  try { origin = new URL(url).origin } catch { /* opaque/about: tabs */ }
+  return { url, ...(origin ? { origin } : {}) }
 }
 ```
 
-(callChromeApi 是异步的 → buildApprovalContext 是 async。需要确认 QueryEngine 是否允许 `buildApprovalContext` async。**修订设计**:把它声明为 `Promise<ApprovalContext>` 返回,QueryEngine 改成 `await` 调用。)
+### `mycli-web/src/extension/approvalContextBuilder.ts`(新,compose 模式)
+
+mycli-web 在 kernel utility 基础上加 selector 提取:
+
+```ts
+import { buildActiveTabApprovalContext } from 'agent-kernel'
+import type { ApprovalContext, ToolCall } from 'agent-kernel'
+
+export async function buildApprovalContext(call: ToolCall): Promise<ApprovalContext> {
+  const base = await buildActiveTabApprovalContext()
+  // mycli-web 特定:querySelector / readSelection 类工具的 args 里有 selector
+  const selector = (call.input as any)?.selector as string | undefined
+  return { ...base, ...(selector ? { selector } : {}) }
+}
+```
+
+`buildApprovalContext` 返回 Promise → QueryEngine 调用处必须 `await`。
+
+**为什么 active tab utility 在 kernel 而 selector 提取在 consumer**:active tab origin/url 是任何浏览器扩展都要的通用 ApprovalContext;selector 提取依赖具体工具命名(`querySelector` / `readSelection`),只有 mycli-web 知道这些名字。
 
 ### `mycli-web/src/extension/ui/ApprovalModal.tsx`(新)
 
@@ -385,12 +414,18 @@ LLM → tool_calls → QueryEngine
 | 并发 pending(未来 parallel tool) | 当前 1-pending 假设破裂 | 文档说明限制;ApprovalCoordinator 内部已用 Map,本身支持多 pending,只是 sticky+UI 单条假设需要扩 |
 | recordRule 失败 | always 没生效 | console.warn;reply 仍按 allow 处理(用户当下被尊重) |
 
-## 前向兼容
+## 前向兼容 & 跨扩展可迁移性
 
-- 多 consumer:其他 Chrome 扩展用 kernel 时,只要提供 adapter 即可拥有完整审批流
+**kernel 可被任何浏览器插件复用**:
+- 其他 MV3 扩展实现 `ApprovalAdapter`(用自己的 storage / rule schema)+ 自己的 UI 监听 `approval/requested` → 发 `approval/reply` 即可获得完整审批流。**不需要 fork kernel**。
+- `buildActiveTabApprovalContext` 是 kernel 提供的开箱即用 utility,通用足以覆盖大部分场景。
+- 其他扩展若不想要 sticky session 行为,也可以让 adapter 直接返回 'allow'/'deny' 绕过 ask。
+
+**前向兼容**:
 - 多 pending(parallel tool):coordinator 已用 Map,只需 UI 支持队列
-- audit log 接入:auditLog.ts 已存在,coordinator 可后续加 `auditAdapter` 钩子
-- 规则管理 UI:rules.ts 已经有 `listRules/removeRule`,后续 spec 加 Options 页即可
+- audit log 接入:`auditLog.ts` 已存在,coordinator 可后续加 `auditAdapter` 钩子(对所有 consumer 可选)
+- 规则管理 UI:mycli-web 的 rules.ts 已有 `listRules/removeRule`,后续 spec 加 Options 页即可(纯 consumer 工作)
+- `ApprovalContext` 是 `Record<string, unknown>` → consumer 想加新字段(如 `userRole`)零阻力
 
 ## 文件清单
 
@@ -398,15 +433,17 @@ LLM → tool_calls → QueryEngine
 
 | 文件 | 改动 |
 |---|---|
-| `src/core/approval.ts` | 新建,~150 LOC |
+| `src/core/approval.ts` | 新建,~150 LOC(纯 TS,零 chrome) |
 | `src/core/types.ts` | ToolDefinition 加 2 字段 |
 | `src/core/QueryEngine.ts` | gate 接入 ~30 LOC |
 | `src/core/protocol.ts` | Approval Zod 加进 AgentEvent |
+| `src/browser/activeTabContext.ts` | 新建,~15 LOC(用 chrome.tabs,通用 utility) |
 | `src/browser/agentService.ts` | 装配 coordinator + 路由 reply |
 | `src/index.ts` | 导出新符号 |
 | `tests/core/approval/coordinator.test.ts` | 新建 |
 | `tests/core/queryEngine.approval.test.ts` | 新建 |
 | `tests/core/protocol.approval.test.ts` | 新建或扩 |
+| `tests/browser/activeTabContext.test.ts` | 新建(mock chrome.tabs) |
 | `tests/browser/agentService.approval.test.ts` | 新建或扩 agentService.test.ts |
 
 ### Consumer(`packages/mycli-web/`)
