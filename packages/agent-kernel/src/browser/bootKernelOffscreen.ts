@@ -9,7 +9,8 @@ import { createAgentService, type AgentServiceDeps } from './agentService'
 import type { SettingsAdapter } from '../adapters/SettingsAdapter'
 import type { MessageStoreAdapter } from '../adapters/MessageStoreAdapter'
 import type { ToolContextBuilder } from '../adapters/ToolContextBuilder'
-import type { ToolDefinition } from '../core/types'
+import type { ToolDefinition, ToolCall } from '../core/types'
+import type { ApprovalAdapter, ApprovalContext } from '../core/approval'
 
 // Sentinel sessionId for runtime-wide events that don't belong to any chat
 // session — same constant the SW-side hub uses for runtime/error fanout.
@@ -22,6 +23,8 @@ export interface BootKernelOffscreenOptions {
   tools: ToolDefinition<any, any, any>[]
   /** Override createAgent (tests inject fakes). */
   createAgent?: AgentServiceDeps['createAgent']
+  approvalAdapter?: ApprovalAdapter
+  buildApprovalContext?: (call: ToolCall) => ApprovalContext | Promise<ApprovalContext>
 }
 
 export function bootKernelOffscreen(opts: BootKernelOffscreenOptions): void {
@@ -72,6 +75,8 @@ export function bootKernelOffscreen(opts: BootKernelOffscreenOptions): void {
     toolContext: opts.toolContext,
     tools: opts.tools,
     createAgent: opts.createAgent,
+    approvalAdapter: opts.approvalAdapter,
+    buildApprovalContext: opts.buildApprovalContext,
   })
 
   chrome.runtime.onConnect.addListener((port) => {

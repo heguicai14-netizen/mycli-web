@@ -88,8 +88,8 @@ export interface AgentService {
     input: RunTurnInput,
     onAbortable?: (cancel: () => void) => void,
   ): Promise<void>
-  /** Dispatch a non-turn command (e.g. approval/reply). Returns false if the
-   *  command kind is unrecognised. Present only when relevant deps are wired. */
+  /** Dispatch a non-turn ClientCmd (e.g. approval/reply). Unrecognised kinds
+   *  are silently ignored. */
   handleCommand?(cmd: { kind: string; [k: string]: unknown }): void
 }
 
@@ -125,7 +125,7 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
                 argsSummary: e.summary,
                 origin:
                   typeof e.req.ctx?.origin === 'string'
-                    ? (e.req.ctx.origin as string)
+                    ? e.req.ctx.origin
                     : undefined,
               },
             })
