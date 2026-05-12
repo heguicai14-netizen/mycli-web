@@ -149,6 +149,7 @@ export class QueryEngine {
             this.opts.signal,
           )
           if (gateResult === 'deny') {
+            yield { kind: 'tool_executing', call }
             const denyContent = `User denied this tool call: ${call.name}.`
             yield { kind: 'tool_result', callId: call.id, content: denyContent, isError: true }
             history.push({

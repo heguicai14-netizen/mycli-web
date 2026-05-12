@@ -199,4 +199,74 @@ describe('QueryEngine approval gate', () => {
     coord.resolve(emitArg.approvalId, 'once')
     await runP
   })
+
+  it('throws when approvalCoordinator is set but sessionId is missing', async () => {
+    const tool = fakeTool()
+    const coord = new ApprovalCoordinator({
+      adapter: { check: vi.fn().mockResolvedValue('ask') },
+      emit: vi.fn(),
+    })
+    const client = fakeClient([
+      [
+        {
+          kind: 'done',
+          stopReason: 'tool_calls',
+          toolCalls: [{ id: 'c1', name: 'dangerous', input: {} }],
+        },
+      ],
+    ])
+    const engine = new QueryEngine({
+      client,
+      tools: [fakeOpenAiToolSchema],
+      toolDefinitions: [tool],
+      executeTool: tool.execute as any,
+      approvalCoordinator: coord,
+      // sessionId intentionally omitted
+    })
+    let err: unknown
+    try {
+      for await (const _ev of engine.run([{ role: 'user', content: 'go' }])) {
+        // drain
+      }
+    } catch (e) {
+      err = e
+    }
+    expect(err).toBeInstanceOf(Error)
+    expect(String(err)).toMatch(/sessionId/i)
+    expect(tool.execute as any).not.toHaveBeenCalled()
+  })
+
+  it('deny path emits paired tool_executing + tool_result events', async () => {
+    const tool = fakeTool()
+    const coord = new ApprovalCoordinator({
+      adapter: { check: vi.fn().mockResolvedValue('deny') },
+      emit: vi.fn(),
+    })
+    const client = fakeClient([
+      [
+        {
+          kind: 'done',
+          stopReason: 'tool_calls',
+          toolCalls: [{ id: 'c1', name: 'dangerous', input: {} }],
+        },
+      ],
+      [{ kind: 'done', stopReason: 'stop' }],
+    ])
+    const engine = new QueryEngine({
+      client,
+      tools: [fakeOpenAiToolSchema],
+      toolDefinitions: [tool],
+      executeTool: tool.execute as any,
+      approvalCoordinator: coord,
+      sessionId: 'sess',
+    })
+    const out: any[] = []
+    for await (const ev of engine.run([{ role: 'user', content: 'go' }])) out.push(ev)
+    const executingIdx = out.findIndex((e) => e.kind === 'tool_executing')
+    const resultIdx = out.findIndex((e) => e.kind === 'tool_result')
+    expect(executingIdx).toBeGreaterThanOrEqual(0)
+    expect(resultIdx).toBeGreaterThan(executingIdx)
+    expect(out[resultIdx].isError).toBe(true)
+    expect((tool.execute as any)).not.toHaveBeenCalled()
+  })
 })
