@@ -48,6 +48,7 @@ const Usage = z.object({
   kind: z.literal('usage'),
   input: z.number().int().nonnegative(),
   output: z.number().int().nonnegative(),
+  cached: z.number().int().nonnegative().optional(),
 })
 
 // Per-iteration assistant message boundary. Each LLM completion within a

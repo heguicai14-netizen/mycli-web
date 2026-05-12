@@ -69,4 +69,26 @@ describe('QueryEngine usage event', () => {
     expect(completes[0].usage).toEqual({ in: 10, out: 5 })
     expect(completes[1].usage).toBeUndefined()
   })
+
+  it('forwards cached on assistant_message_complete when client reports it', async () => {
+    const client = fakeClient([
+      [
+        { kind: 'delta', text: 'hi' },
+        {
+          kind: 'done',
+          stopReason: 'stop',
+          usage: { in: 42, out: 7, cached: 30 },
+        },
+      ],
+    ])
+    const engine = new QueryEngine({
+      client,
+      tools: [],
+      executeTool: async () => ({ ok: true, data: '' }),
+    })
+    const out: any[] = []
+    for await (const ev of engine.run([{ role: 'user', content: 'hi' }])) out.push(ev)
+    const complete = out.find((e) => e.kind === 'assistant_message_complete')
+    expect(complete.usage).toEqual({ in: 42, out: 7, cached: 30 })
+  })
 })

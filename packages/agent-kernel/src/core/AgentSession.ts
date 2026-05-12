@@ -83,7 +83,12 @@ export class AgentSession<ExtraCtx = Record<string, never>> {
           toolCalls: ev.toolCalls,
         }
         if (ev.usage) {
-          yield { kind: 'usage', input: ev.usage.in, output: ev.usage.out }
+          yield {
+            kind: 'usage',
+            input: ev.usage.in,
+            output: ev.usage.out,
+            ...(ev.usage.cached !== undefined ? { cached: ev.usage.cached } : {}),
+          }
         }
       } else if (ev.kind === 'tool_executing') {
         yield {

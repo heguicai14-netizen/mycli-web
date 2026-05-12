@@ -1,6 +1,7 @@
 import type {
   OpenAICompatibleClient,
   ChatMessage,
+  NormalizedUsage,
 } from './OpenAICompatibleClient'
 import type { ToolCall, ToolResult } from './types'
 import { truncateForLLM } from './truncate'
@@ -11,7 +12,7 @@ export type EngineEvent =
       kind: 'assistant_message_complete'
       text: string
       toolCalls: ToolCall[]
-      usage?: { in: number; out: number }
+      usage?: NormalizedUsage
     }
   | { kind: 'tool_executing'; call: ToolCall }
   | { kind: 'tool_result'; callId: string; content: string; isError: boolean }
@@ -53,7 +54,7 @@ export class QueryEngine {
       let assistantText = ''
       let stopReason: 'stop' | 'tool_calls' | 'length' | 'content_filter' | 'unknown' = 'stop'
       let toolCallsFinal: ToolCall[] = []
-      let usageThisIter: { in: number; out: number } | undefined
+      let usageThisIter: NormalizedUsage | undefined
 
       try {
         for await (const ev of this.opts.client.streamChat({
