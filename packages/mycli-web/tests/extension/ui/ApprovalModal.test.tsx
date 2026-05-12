@@ -25,6 +25,8 @@ describe('ApprovalModal', () => {
     // origin appears as its own paragraph — getAllByText handles the fact that
     // argsSummary also contains "example.com"
     expect(screen.getAllByText(/example.com/i).length).toBeGreaterThan(0)
+    const dialog = screen.getByRole('dialog')
+    expect(dialog.getAttribute('aria-modal')).toBe('true')
   })
 
   it('calls onReply with correct decision on each button', () => {

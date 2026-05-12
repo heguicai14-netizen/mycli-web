@@ -13,6 +13,8 @@ export interface ApprovalModalProps {
 }
 
 export function ApprovalModal({ pending, onReply }: ApprovalModalProps) {
+  // Esc listener on `document` (not the Shadow root) — keydown events bubble
+  // out of Shadow DOM, so this works for closed-mode shadow roots too.
   useEffect(() => {
     if (!pending) return
     const handler = (e: KeyboardEvent) => {
@@ -27,6 +29,7 @@ export function ApprovalModal({ pending, onReply }: ApprovalModalProps) {
   return (
     <div
       role="dialog"
+      aria-modal="true"
       aria-label="Approval needed"
       style={{
         position: 'fixed',
@@ -38,7 +41,7 @@ export function ApprovalModal({ pending, onReply }: ApprovalModalProps) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 999999,
+        zIndex: 2147483647,
       }}
     >
       <div
