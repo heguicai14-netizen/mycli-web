@@ -175,6 +175,42 @@ describe('agentService.runTurn', () => {
     expect(usage.sessionId).toBe('s1')
   })
 
+  it('forwards cached on wire message/usage when AgentSession reports it', async () => {
+    const { deps, events } = makeDeps({
+      agentEvents: [
+        { kind: 'message/streamChunk', delta: 'hi' },
+        { kind: 'usage', input: 42, output: 7, cached: 30 } as any,
+        { kind: 'done', stopReason: 'end_turn', assistantText: 'hi' },
+      ],
+    })
+    const svc = createAgentService(deps as any)
+    await svc.runTurn({ sessionId: 's1', text: 'hi' })
+
+    const usage = events.find((e) => e.kind === 'message/usage')
+    expect(usage).toBeDefined()
+    expect(usage.cached).toBe(30)
+    expect(usage.input).toBe(42)
+    expect(usage.output).toBe(7)
+  })
+
+  it('omits cached field on wire message/usage when AgentSession does not report it', async () => {
+    const { deps, events } = makeDeps({
+      agentEvents: [
+        { kind: 'message/streamChunk', delta: 'hi' },
+        { kind: 'usage', input: 42, output: 7 } as any,
+        { kind: 'done', stopReason: 'end_turn', assistantText: 'hi' },
+      ],
+    })
+    const svc = createAgentService(deps as any)
+    await svc.runTurn({ sessionId: 's1', text: 'hi' })
+
+    const usage = events.find((e) => e.kind === 'message/usage')
+    expect(usage).toBeDefined()
+    expect(usage.cached).toBeUndefined()
+    // Stricter: cached property should NOT be on the object at all (conditional spread)
+    expect('cached' in usage).toBe(false)
+  })
+
   it('tools allowlist filters the tool set passed to createAgent', async () => {
     const fakeTool = (name: string): ToolDefinition<any, any, any> =>
       ({ name, description: '', inputSchema: {}, execute: async () => ({ ok: true, data: {} }) }) as any

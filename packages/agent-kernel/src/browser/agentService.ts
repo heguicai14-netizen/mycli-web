@@ -423,6 +423,7 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
                 messageId: lastAssistantId,
                 input: ev.input,
                 output: ev.output,
+                ...(ev.cached !== undefined ? { cached: ev.cached } : {}),
               })
             }
           } else if (ev.kind === 'tool/start') {

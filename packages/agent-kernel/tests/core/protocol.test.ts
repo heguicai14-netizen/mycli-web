@@ -64,3 +64,32 @@ describe('Envelope', () => {
     expect(parsed.success).toBe(true)
   })
 })
+
+describe('AgentEvent message/usage with cached', () => {
+  it('accepts message/usage with cached field', () => {
+    const parsed = AgentEvent.safeParse({
+      id: '11111111-1111-4111-8111-111111111111',
+      sessionId: '22222222-2222-4222-8222-222222222222',
+      ts: 1_700_000_000_000,
+      kind: 'message/usage',
+      messageId: '44444444-4444-4444-8444-444444444444',
+      input: 100,
+      output: 20,
+      cached: 80,
+    })
+    expect(parsed.success).toBe(true)
+  })
+
+  it('accepts message/usage WITHOUT cached field (backward compat)', () => {
+    const parsed = AgentEvent.safeParse({
+      id: '11111111-1111-4111-8111-111111111111',
+      sessionId: '22222222-2222-4222-8222-222222222222',
+      ts: 1_700_000_000_000,
+      kind: 'message/usage',
+      messageId: '44444444-4444-4444-8444-444444444444',
+      input: 100,
+      output: 20,
+    })
+    expect(parsed.success).toBe(true)
+  })
+})

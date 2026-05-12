@@ -122,6 +122,7 @@ const MessageUsage = Base.extend({
   messageId: Uuid,
   input: z.number().int().nonnegative(),
   output: z.number().int().nonnegative(),
+  cached: z.number().int().nonnegative().optional(),
 })
 
 // Auto-compaction wire events. Emitted by agentService when the conversation
