@@ -15,6 +15,8 @@
 | T3 | `a530b39` | `QueryEngine` + `AgentSession` + core protocol Zod 传递 `cached?` |
 | T4 | `5e6a627` | wire `MessageUsage` Zod 加 `cached?`，`agentService.runTurn` 转发 |
 | T5 | `6920422` | live 集成测试 #14 验证字段链路，默认 skip，无凭据不跑 |
+| docs | `e446b34` | 本交接文档(初版) |
+| docs | (this commit) | 本交接文档补上自身 SHA |
 
 ## 如何试一下
 
