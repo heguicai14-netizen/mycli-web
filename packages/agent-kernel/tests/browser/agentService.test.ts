@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createAgentService } from 'agent-kernel'
 import type { AgentEvent as CoreAgentEvent, ToolDefinition } from 'agent-kernel'
+import { ApprovalCoordinator } from 'agent-kernel'
 
 // Minimal fake AgentSession that yields a scripted stream of agent-core events.
 function makeFakeAgent(events: CoreAgentEvent[]) {
@@ -46,6 +47,7 @@ function makeDeps(opts: {
   history?: Array<{ id: string; role: string; content: unknown; compacted?: boolean }>
   tools?: ToolDefinition<any, any, any>[]
   capturedAgentOpts?: { current: any }
+  approvalCoordinator?: ApprovalCoordinator
 }) {
   const events: any[] = []
   const idbCalls: string[] = []
@@ -89,6 +91,7 @@ function makeDeps(opts: {
       if (opts.capturedAgentOpts) opts.capturedAgentOpts.current = agentOpts
       return fake.session as any
     }),
+    approvalCoordinator: opts.approvalCoordinator,
   }
 
   return { deps, events, idbCalls, fake, messageStore }
@@ -857,5 +860,68 @@ describe('agentService.runTurn', () => {
     expect(fatal).toBeDefined()
     expect(fatal.code).toBe('engine_error')
     expect(fatal.message).toContain('boom')
+  })
+})
+
+describe('agentService approval flow', () => {
+  it('routes wire approval/reply to coordinator.resolve', async () => {
+    const fakeCoord = {
+      resolve: vi.fn(),
+      cancelSession: vi.fn(),
+      gate: vi.fn(),
+    } as unknown as ApprovalCoordinator
+
+    const { deps } = makeDeps({ approvalCoordinator: fakeCoord })
+    const svc = createAgentService(deps as any)
+
+    svc.handleCommand?.({
+      id: crypto.randomUUID(),
+      sessionId: 's1',
+      ts: Date.now(),
+      kind: 'approval/reply',
+      approvalId: 'a1',
+      decision: 'session',
+    })
+
+    expect((fakeCoord.resolve as any)).toHaveBeenCalledWith('a1', 'session')
+  })
+
+  it('handleCommand is a no-op for unknown kinds', () => {
+    const { deps } = makeDeps({})
+    const svc = createAgentService(deps as any)
+    // Should not throw
+    svc.handleCommand?.({ kind: 'unknown/thing', sessionId: 's1' })
+  })
+
+  it('cancelSession is called when a turn cancels', async () => {
+    const fakeCoord = {
+      resolve: vi.fn(),
+      cancelSession: vi.fn(),
+      gate: vi.fn(),
+    } as unknown as ApprovalCoordinator
+
+    const { deps } = makeDeps({
+      approvalCoordinator: fakeCoord,
+      agentEvents: [
+        { kind: 'message/streamChunk', delta: 'a' },
+        { kind: 'done', stopReason: 'cancel', assistantText: 'a' },
+      ],
+    })
+
+    const svc = createAgentService(deps as any)
+    let cancelFn: (() => void) | undefined
+    await svc.runTurn(
+      { sessionId: 's1', text: 'q', ephemeral: true },
+      (cancel) => {
+        cancelFn = cancel
+        cancel() // cancel immediately
+      },
+    )
+
+    expect(typeof cancelFn).toBe('function')
+    expect((fakeCoord.cancelSession as any)).toHaveBeenCalledWith(
+      's1',
+      expect.any(String),
+    )
   })
 })

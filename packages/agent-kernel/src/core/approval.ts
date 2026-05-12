@@ -30,7 +30,7 @@ export class ApprovalCoordinator {
   constructor(
     private opts: {
       adapter: ApprovalAdapter
-      emit: (e: { approvalId: string; req: ApprovalRequest; summary: string }) => void
+      emit: (e: { approvalId: string; req: ApprovalRequest; summary: string; sessionId: string }) => void
     },
   ) {}
 
@@ -71,7 +71,7 @@ export class ApprovalCoordinator {
       }
       signal.addEventListener('abort', abortHandler)
     }
-    this.opts.emit({ approvalId, req, summary })
+    this.opts.emit({ approvalId, req, summary, sessionId })
     try {
       return await promise
     } finally {

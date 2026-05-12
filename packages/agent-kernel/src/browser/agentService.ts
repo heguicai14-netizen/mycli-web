@@ -14,7 +14,7 @@ import type { AgentSession as CoreAgentSession } from '../core/AgentSession'
 import type { ChatMessage } from '../core/OpenAICompatibleClient'
 import { OpenAICompatibleClient } from '../core/OpenAICompatibleClient'
 import type { AgentEvent as CoreAgentEvent } from '../core/protocol'
-import type { ToolDefinition } from '../core/types'
+import type { ToolDefinition, ToolCall } from '../core/types'
 import { fetchGetTool } from '../core/tools/fetchGet'
 import { compactMessages } from '../core/compactor'
 import { truncateForLLM } from '../core/truncate'
@@ -22,6 +22,11 @@ import { estimateMessageTokens, estimateTokens } from '../core/tokenBudget'
 import type { SettingsAdapter } from '../adapters/SettingsAdapter'
 import type { MessageStoreAdapter, MessageRecord } from '../adapters/MessageStoreAdapter'
 import type { ToolContextBuilder } from '../adapters/ToolContextBuilder'
+import {
+  ApprovalCoordinator,
+  type ApprovalAdapter,
+  type ApprovalContext,
+} from '../core/approval'
 
 export type { Settings } from '../adapters/SettingsAdapter'
 
@@ -64,6 +69,14 @@ export interface AgentServiceDeps {
     baseUrl: string
     model: string
   }) => Promise<string>
+  /** Adapter for approval decisions. If provided, agentService constructs an
+   *  ApprovalCoordinator and wires it into each QueryEngine. */
+  approvalAdapter?: ApprovalAdapter
+  /** Override the coordinator directly (used by tests). When provided,
+   *  agentService uses this instance and ignores approvalAdapter. */
+  approvalCoordinator?: ApprovalCoordinator
+  /** Build ApprovalContext for each tool call. */
+  buildApprovalContext?: (call: ToolCall) => ApprovalContext | Promise<ApprovalContext>
 }
 
 export interface AgentService {
@@ -75,6 +88,9 @@ export interface AgentService {
     input: RunTurnInput,
     onAbortable?: (cancel: () => void) => void,
   ): Promise<void>
+  /** Dispatch a non-turn command (e.g. approval/reply). Returns false if the
+   *  command kind is unrecognised. Present only when relevant deps are wired. */
+  handleCommand?(cmd: { kind: string; [k: string]: unknown }): void
 }
 
 export function createAgentService(deps: AgentServiceDeps): AgentService {
@@ -90,7 +106,49 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
       return compactMessages({ messages, client })
     })
 
+  // Construct (or accept override of) the ApprovalCoordinator once per service
+  // instance so sticky decisions persist across turns within the same session.
+  const coordinator: ApprovalCoordinator | undefined =
+    deps.approvalCoordinator ??
+    (deps.approvalAdapter
+      ? new ApprovalCoordinator({
+          adapter: deps.approvalAdapter,
+          emit: (e) => {
+            deps.emit({
+              id: crypto.randomUUID(),
+              sessionId: e.sessionId,
+              ts: Date.now(),
+              kind: 'approval/requested',
+              approval: {
+                id: e.approvalId,
+                tool: e.req.tool,
+                argsSummary: e.summary,
+                origin:
+                  typeof e.req.ctx?.origin === 'string'
+                    ? (e.req.ctx.origin as string)
+                    : undefined,
+              },
+            })
+          },
+        })
+      : undefined)
+
   return {
+    handleCommand(cmd) {
+      if (cmd.kind === 'approval/reply') {
+        if (coordinator) {
+          coordinator.resolve(
+            cmd.approvalId as string,
+            cmd.decision as any,
+          )
+        } else {
+          console.warn(
+            '[agentService] approval/reply received but no coordinator configured',
+          )
+        }
+      }
+    },
+
     async runTurn(cmd, onAbortable) {
       console.log(
         '[mycli-web/agent] runTurn start, text:',
@@ -322,9 +380,15 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
         toolMaxIterations: settings.toolMaxIterations,
         systemPrompt,
         toolMaxOutputChars: settings.toolMaxOutputChars,
+        approvalCoordinator: coordinator,
+        sessionId: cmd.sessionId,
+        buildApprovalContext: deps.buildApprovalContext,
       })
 
-      onAbortable?.(() => agent.cancel())
+      onAbortable?.(() => {
+        agent.cancel()
+        coordinator?.cancelSession(cmd.sessionId, 'turn cancelled')
+      })
 
       // Per-iteration row management. We append assistant rows lazily — the
       // first streamChunk of an iteration triggers an append; the iter's

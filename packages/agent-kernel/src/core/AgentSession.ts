@@ -3,6 +3,7 @@ import type { OpenAICompatibleClient, ChatMessage } from './OpenAICompatibleClie
 import type { ToolExecContext, ToolCall } from './types'
 import type { AgentEvent } from './protocol'
 import { ToolRegistry } from './ToolRegistry'
+import type { ApprovalCoordinator, ApprovalContext } from './approval'
 
 export interface AgentSessionOptions<ExtraCtx = Record<string, never>> {
   llmClient: OpenAICompatibleClient
@@ -12,6 +13,12 @@ export interface AgentSessionOptions<ExtraCtx = Record<string, never>> {
   toolMaxIterations?: number
   /** Forwarded to QueryEngine — see QueryEngineOptions.toolMaxOutputChars. */
   toolMaxOutputChars?: number
+  /** Approval coordinator for gating tool calls that require user approval. */
+  approvalCoordinator?: ApprovalCoordinator
+  /** Session id — required when approvalCoordinator is set. */
+  sessionId?: string
+  /** Build ApprovalContext for each tool call. */
+  buildApprovalContext?: (call: ToolCall) => ApprovalContext | Promise<ApprovalContext>
 }
 
 export class AgentSession<ExtraCtx = Record<string, never>> {
@@ -63,6 +70,10 @@ export class AgentSession<ExtraCtx = Record<string, never>> {
       systemPrompt: this.opts.systemPrompt,
       signal: this.abort.signal,
       toolMaxOutputChars: this.opts.toolMaxOutputChars,
+      toolDefinitions: this.opts.registry.all(),
+      approvalCoordinator: this.opts.approvalCoordinator,
+      sessionId: this.opts.sessionId,
+      buildApprovalContext: this.opts.buildApprovalContext,
     })
 
     let assistantText = ''

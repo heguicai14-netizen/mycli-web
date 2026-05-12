@@ -36,6 +36,7 @@ describe('ApprovalCoordinator.gate', () => {
     expect(arg.approvalId).toBeTypeOf('string')
     expect(arg.summary).toBe('do thing')
     expect(arg.req.tool).toBe('t')
+    expect(arg.sessionId).toBe('s1')
     coord.resolve(arg.approvalId, 'once')
     expect(await p).toBe('allow')
   })

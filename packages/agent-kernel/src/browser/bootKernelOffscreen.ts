@@ -131,6 +131,9 @@ export function bootKernelOffscreen(opts: BootKernelOffscreenOptions): void {
       case 'chat/resubscribe':
         await pushSnapshot(cmd.sessionId, cmd.conversationId)
         return
+      case 'approval/reply':
+        agentService.handleCommand?.(cmd)
+        return
       case 'ping':
         // Hub ack handles it; offscreen is a no-op so the SW just stays alive.
         return

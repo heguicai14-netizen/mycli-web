@@ -1,7 +1,8 @@
 import { AgentSession } from './AgentSession'
 import { OpenAICompatibleClient } from './OpenAICompatibleClient'
 import { ToolRegistry } from './ToolRegistry'
-import type { ToolDefinition } from './types'
+import type { ToolDefinition, ToolCall } from './types'
+import type { ApprovalCoordinator, ApprovalContext } from './approval'
 
 export interface CreateAgentOptions<ExtraCtx = Record<string, never>> {
   /** OpenAI-compatible 配置；二选一：llm（自动构造 client）或 llmClient（自带实例，便于测试） */
@@ -18,6 +19,12 @@ export interface CreateAgentOptions<ExtraCtx = Record<string, never>> {
   toolMaxIterations?: number
   /** Forwarded to QueryEngine — see QueryEngineOptions.toolMaxOutputChars. */
   toolMaxOutputChars?: number
+  /** Approval coordinator for gating tool calls that require user approval. */
+  approvalCoordinator?: ApprovalCoordinator
+  /** Session id — required when approvalCoordinator is set. */
+  sessionId?: string
+  /** Build ApprovalContext for each tool call. */
+  buildApprovalContext?: (call: ToolCall) => ApprovalContext | Promise<ApprovalContext>
 }
 
 export function createAgent<ExtraCtx>(opts: CreateAgentOptions<ExtraCtx>): AgentSession<ExtraCtx> {
@@ -34,5 +41,8 @@ export function createAgent<ExtraCtx>(opts: CreateAgentOptions<ExtraCtx>): Agent
     systemPrompt: opts.systemPrompt,
     toolMaxIterations: opts.toolMaxIterations,
     toolMaxOutputChars: opts.toolMaxOutputChars,
+    approvalCoordinator: opts.approvalCoordinator,
+    sessionId: opts.sessionId,
+    buildApprovalContext: opts.buildApprovalContext,
   })
 }
