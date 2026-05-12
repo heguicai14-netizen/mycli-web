@@ -37,6 +37,16 @@ export type {
   ContentPart,
 } from './core/types'
 
+// === core: approval flow ===
+export {
+  ApprovalCoordinator,
+  type ApprovalAdapter,
+  type ApprovalContext,
+  type ApprovalDecision,
+  type ApprovalReplyDecision,
+  type ApprovalRequest,
+} from './core/approval'
+
 // === skills 协议 ===
 export { parseSkillMd, type SkillDefinition, type ParsedSkillMd } from './skills/Skill'
 export { SkillRegistry } from './skills/SkillRegistry'

@@ -57,6 +57,11 @@ export interface ToolDefinition<I = unknown, O = unknown, ExtraCtx = Record<stri
   description: string
   inputSchema: Record<string, unknown>
   execute(input: I, ctx: ToolExecContext & ExtraCtx): Promise<ToolResult<O>>
+  /** When true, the kernel will gate this tool's calls through ApprovalCoordinator. */
+  requiresApproval?: boolean
+  /** Optional human-readable summary of args for the approval dialog.
+   *  Default: JSON.stringify(args).slice(0, 200). */
+  summarizeArgs?: (input: I) => string
 }
 
 export interface ToolExecContext {
