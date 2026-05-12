@@ -1,3 +1,29 @@
+export interface NormalizedUsage {
+  in: number
+  out: number
+  /** Provider-reported cached prompt tokens. undefined if provider doesn't expose it. */
+  cached?: number
+}
+
+export type UsageParser = (rawUsage: unknown) => Pick<NormalizedUsage, 'cached'>
+
+/**
+ * Default usage parser. Recognizes OpenAI/GLM-4.6 (prompt_tokens_details.cached_tokens)
+ * and DeepSeek (prompt_cache_hit_tokens) shapes. Returns { cached: undefined } for
+ * unknown shapes — never throws.
+ */
+export const defaultUsageParser: UsageParser = (raw) => {
+  if (!raw || typeof raw !== 'object') return { cached: undefined }
+  const u = raw as Record<string, unknown>
+  const openaiPath = (u.prompt_tokens_details as { cached_tokens?: unknown } | undefined)
+    ?.cached_tokens
+  if (typeof openaiPath === 'number') return { cached: openaiPath }
+  if (typeof u.prompt_cache_hit_tokens === 'number') {
+    return { cached: u.prompt_cache_hit_tokens }
+  }
+  return { cached: undefined }
+}
+
 export interface ClientConfig {
   apiKey: string
   baseUrl: string

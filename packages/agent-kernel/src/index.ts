@@ -6,8 +6,11 @@ export { createAgent, type CreateAgentOptions } from './core/createAgent'
 export { AgentSession } from './core/AgentSession'
 export {
   OpenAICompatibleClient,
+  defaultUsageParser,
   type ChatMessage,
   type StreamEvent,
+  type NormalizedUsage,
+  type UsageParser,
 } from './core/OpenAICompatibleClient'
 export { QueryEngine, type EngineEvent } from './core/QueryEngine'
 export { ToolRegistry } from './core/ToolRegistry'
