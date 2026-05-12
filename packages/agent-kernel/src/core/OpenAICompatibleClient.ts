@@ -33,6 +33,12 @@ export interface ClientConfig {
    * (fetch hangs indefinitely on unresponsive endpoints).
    */
   fetchTimeoutMs?: number
+  /**
+   * Override how cached_tokens is extracted from the raw usage object on the
+   * final SSE chunk. Defaults to defaultUsageParser. Errors thrown by this
+   * function are caught (warning emitted) and treated as cached=undefined.
+   */
+  usageParser?: UsageParser
 }
 
 function combineSignals(...signals: (AbortSignal | undefined)[]): AbortSignal | undefined {
@@ -84,7 +90,7 @@ export type StreamEvent =
       kind: 'done'
       stopReason: 'stop' | 'tool_calls' | 'length' | 'content_filter' | 'unknown'
       toolCalls?: Array<{ id: string; name: string; input: unknown }>
-      usage?: { in: number; out: number }
+      usage?: NormalizedUsage
     }
 
 import { classifyError } from '../errors'
@@ -169,7 +175,7 @@ export class OpenAICompatibleClient {
     // Accumulator for tool_calls (OpenAI streams them in pieces by index)
     const toolAcc = new Map<number, { id: string; name: string; arguments: string }>()
     let finishReason: string | undefined
-    let usage: { in: number; out: number } | undefined
+    let usage: NormalizedUsage | undefined
 
     const reader = res.body.getReader()
     // Abort signal → cancel the reader. Real fetch honors AbortSignal natively, but
@@ -208,7 +214,19 @@ export class OpenAICompatibleClient {
           continue
         }
         if (parsed.usage && typeof parsed.usage.prompt_tokens === 'number') {
-          usage = { in: parsed.usage.prompt_tokens, out: parsed.usage.completion_tokens ?? 0 }
+          const parser = this.cfg.usageParser ?? defaultUsageParser
+          let cachedField: number | undefined
+          try {
+            cachedField = parser(parsed.usage).cached
+          } catch (e) {
+            console.warn('[OpenAICompatibleClient] usageParser threw, treating cached as undefined', e)
+            cachedField = undefined
+          }
+          usage = {
+            in: parsed.usage.prompt_tokens,
+            out: parsed.usage.completion_tokens ?? 0,
+            ...(cachedField !== undefined ? { cached: cachedField } : {}),
+          }
         }
         const choice = parsed?.choices?.[0]
         if (!choice) continue
