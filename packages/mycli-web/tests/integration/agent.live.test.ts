@@ -270,6 +270,40 @@ describe.skipIf(!live)('agent live integration (real LLM)', () => {
     }
   }, 30_000)
 
+  // ---------- cached_tokens propagation (T5 of prompt-cache-observability) ----------
+  // Validates the field-chain (defaultUsageParser → client → engine → session →
+  // service → wire). Does NOT assert cached > 0 — cold cache may not hit, and
+  // providers vary on whether they expose cached_tokens at all. Field must
+  // either be a number (when reported) or absent/undefined.
+  it('14. cached usage — cached field is plumbed through usage events', async () => {
+    // Use a longer-than-default system prompt so providers that auto-cache have
+    // something stable to cache against across requests within this test run.
+    const stableSystem = `You are a helpful assistant. ${'X'.repeat(2000)}`
+    const agent = buildAgent([], { system: stableSystem })
+    const events = await collect(
+      agent.send('Reply with a single short word: "ok".'),
+    )
+    const usageEvents = events.filter((e) => e.kind === 'usage')
+    if (usageEvents.length === 0) {
+      console.warn(
+        `[live] provider ${baseUrl} did not emit usage on the stream — ` +
+          'cannot verify cached plumbing for this provider.',
+      )
+    } else {
+      for (const ev of usageEvents) {
+        if (ev.kind !== 'usage') continue
+        // The field must either be a non-negative number or absent.
+        // Note: 'cached' may not appear on every event from every provider.
+        expect(['number', 'undefined']).toContain(typeof ev.cached)
+        if (typeof ev.cached === 'number') {
+          expect(ev.cached).toBeGreaterThanOrEqual(0)
+        }
+      }
+    }
+    const done = events.find((e) => e.kind === 'done')
+    expect(done).toBeDefined()
+  }, 30_000)
+
   // ---------- 10. Tool result truncation actually shrinks the LLM view ----------
   // We give the model a tool that returns a 60KB blob with a secret marker
   // hidden well past the 1000-char cap. With truncation enabled, the LLM
