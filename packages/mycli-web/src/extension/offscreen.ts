@@ -14,6 +14,8 @@ import {
 import { extensionTools, type ExtensionToolCtx, type ExtensionToolRpc } from '@ext-tools'
 import { useSkillTool, readSkillFileTool } from '@ext-skills'
 import { mycliSettingsAdapter } from './settingsAdapter'
+import { mycliApprovalAdapter } from './mycliApprovalAdapter'
+import { buildApprovalContext } from './approvalContextBuilder'
 
 async function guessActiveTab(): Promise<chrome.tabs.Tab | undefined> {
   try {
@@ -45,4 +47,6 @@ bootKernelOffscreen({
   // Kernel default is just [fetchGetTool]; extend with mycli-web's
   // extension/skill tool sets explicitly.
   tools: [fetchGetTool, ...extensionTools, useSkillTool, readSkillFileTool],
+  approvalAdapter: mycliApprovalAdapter,
+  buildApprovalContext,
 })

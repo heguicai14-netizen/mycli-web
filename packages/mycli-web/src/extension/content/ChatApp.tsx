@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Fab } from './fab'
 import { ChatWindow } from '../ui/ChatWindow'
+import { ApprovalModal, type PendingApproval } from '../ui/ApprovalModal'
 import type { DisplayMessage, DisplayToolCall } from '../ui/MessageList'
 import type { ConversationItem } from '../ui/ConversationList'
 import { RpcClient } from 'agent-kernel'
@@ -30,6 +31,7 @@ export function ChatApp() {
   const compactHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [conversations, setConversations] = useState<ConversationItem[]>([])
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
+  const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null)
   const clientRef = useRef<RpcClient | null>(null)
   const lastAssistantIdRef = useRef<string | null>(null)
 
@@ -262,6 +264,17 @@ export function ChatApp() {
         setErrorBanner({ text: `${ev.source} error: ${ev.message}` })
       })
 
+      client.on('approval/requested' as any, (ev: any) => {
+        const a = ev.approval
+        if (!a) return
+        setPendingApproval({
+          approvalId: a.id,
+          tool: a.tool,
+          argsSummary: a.argsSummary,
+          origin: a.origin,
+        })
+      })
+
       // Resubscribe to the active conversation so reopening the chat or
       // navigating between pages restores prior messages from IDB.
       try {
@@ -389,6 +402,11 @@ export function ChatApp() {
     setErrorBanner(undefined)
   }
 
+  function replyApproval(approvalId: string, decision: 'once' | 'session' | 'always' | 'deny') {
+    clientRef.current?.send({ kind: 'approval/reply', approvalId, decision } as any).catch(() => {})
+    setPendingApproval(null)
+  }
+
   return (
     <>
       <Fab onClick={toggle} position={position} />
@@ -412,6 +430,7 @@ export function ChatApp() {
           onDeleteConversation={deleteConversation}
         />
       )}
+      <ApprovalModal pending={pendingApproval} onReply={replyApproval} />
     </>
   )
 }
