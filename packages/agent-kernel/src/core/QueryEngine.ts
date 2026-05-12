@@ -3,7 +3,8 @@ import type {
   ChatMessage,
   NormalizedUsage,
 } from './OpenAICompatibleClient'
-import type { ToolCall, ToolResult } from './types'
+import type { ToolCall, ToolResult, ToolDefinition } from './types'
+import type { ApprovalContext, ApprovalCoordinator } from './approval'
 import { truncateForLLM } from './truncate'
 
 export type EngineEvent =
@@ -39,6 +40,19 @@ export interface QueryEngineOptions {
    * Undefined → no truncation.
    */
   toolMaxOutputChars?: number
+  /** Definitions for the tools listed above. Needed to look up
+   *  `requiresApproval` / `summarizeArgs` per call. Optional — when missing,
+   *  approval is never triggered (back-compat). */
+  toolDefinitions?: Array<ToolDefinition<any, any, any>>
+  /** Approval coordinator. When set, requires sessionId. */
+  approvalCoordinator?: ApprovalCoordinator
+  /** Required when approvalCoordinator is set. Identifies the session for
+   *  sticky decisions. */
+  sessionId?: string
+  /** Build ApprovalContext from the tool call. Sync or async. Default: {}. */
+  buildApprovalContext?: (
+    call: ToolCall,
+  ) => ApprovalContext | Promise<ApprovalContext>
 }
 
 export class QueryEngine {
@@ -119,6 +133,32 @@ export class QueryEngine {
 
       // Execute each tool call serially, push tool results back to history
       for (const call of toolCallsFinal) {
+        const def = this.opts.toolDefinitions?.find((t) => t.name === call.name)
+        if (def?.requiresApproval && this.opts.approvalCoordinator) {
+          if (!this.opts.sessionId) {
+            throw new Error('QueryEngine: approvalCoordinator set without sessionId')
+          }
+          const ctx = (await this.opts.buildApprovalContext?.(call)) ?? {}
+          const summary = def.summarizeArgs
+            ? def.summarizeArgs(call.input)
+            : JSON.stringify(call.input).slice(0, 200)
+          const gateResult = await this.opts.approvalCoordinator.gate(
+            { tool: call.name, args: call.input, ctx },
+            summary,
+            this.opts.sessionId,
+            this.opts.signal,
+          )
+          if (gateResult === 'deny') {
+            const denyContent = `User denied this tool call: ${call.name}.`
+            yield { kind: 'tool_result', callId: call.id, content: denyContent, isError: true }
+            history.push({
+              role: 'tool',
+              tool_call_id: call.id,
+              content: denyContent,
+            })
+            continue
+          }
+        }
         yield { kind: 'tool_executing', call }
         const result = await this.opts.executeTool(call)
         const content = result.ok
