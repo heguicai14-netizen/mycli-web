@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { ClientCmd, WireAgentEvent as AgentEvent, Envelope } from 'agent-kernel'
+import {
+  ClientCmd,
+  WireAgentEvent as AgentEvent,
+  AgentEvent as CoreAgentEvent,
+  Envelope,
+} from 'agent-kernel'
 
 describe('ClientCmd schema', () => {
   it('accepts chat/send with valid payload', () => {
@@ -91,5 +96,39 @@ describe('AgentEvent message/usage with cached', () => {
       output: 20,
     })
     expect(parsed.success).toBe(true)
+  })
+})
+
+describe('Core AgentEvent — approval/requested', () => {
+  it('accepts approval/requested with all fields', () => {
+    const parsed = CoreAgentEvent.safeParse({
+      kind: 'approval/requested',
+      approvalId: '33333333-3333-4333-8333-333333333333',
+      tool: 'readPage',
+      argsSummary: 'Read https://example.com',
+      ctx: { origin: 'https://example.com', url: 'https://example.com/foo' },
+    })
+    expect(parsed.success).toBe(true)
+  })
+
+  it('accepts approval/requested with empty ctx', () => {
+    const parsed = CoreAgentEvent.safeParse({
+      kind: 'approval/requested',
+      approvalId: '33333333-3333-4333-8333-333333333333',
+      tool: 't',
+      argsSummary: '',
+      ctx: {},
+    })
+    expect(parsed.success).toBe(true)
+  })
+
+  it('rejects approval/requested missing approvalId', () => {
+    const parsed = CoreAgentEvent.safeParse({
+      kind: 'approval/requested',
+      tool: 't',
+      argsSummary: '',
+      ctx: {},
+    })
+    expect(parsed.success).toBe(false)
   })
 })

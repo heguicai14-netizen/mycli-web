@@ -67,6 +67,17 @@ const AssistantIter = z.object({
   ),
 })
 
+// Approval flow event — emitted by ApprovalCoordinator when adapter.check
+// returns 'ask'. Consumer's UI must capture this and send back a wire-level
+// approval/reply.
+const ApprovalRequested = z.object({
+  kind: z.literal('approval/requested'),
+  approvalId: z.string(),
+  tool: z.string(),
+  argsSummary: z.string(),
+  ctx: z.record(z.string(), z.unknown()),
+})
+
 // Auto-compaction lifecycle. Emitted by the orchestrator (not QueryEngine) when
 // the history exceeds the configured threshold and a summarization pass starts /
 // finishes. UI consumers use these to render a "Compacting…" status banner.
@@ -97,6 +108,7 @@ export const AgentEvent = z.discriminatedUnion('kind', [
   FatalError,
   Usage,
   AssistantIter,
+  ApprovalRequested,
   CompactStarted,
   CompactCompleted,
   CompactFailed,
