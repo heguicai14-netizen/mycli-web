@@ -141,4 +141,60 @@ describe('ApprovalCoordinator.gate', () => {
     ac.abort(new Error('user cancel'))
     await expect(p).rejects.toThrow(/cancel/)
   })
+
+  it('removes abort listener after normal resolve (no leak)', async () => {
+    const { coord, emit } = makeCoord()
+    const ac = new AbortController()
+    // Track listener count via the standard API: we monkey-patch addEventListener
+    // and removeEventListener to count net listeners.
+    let net = 0
+    const origAdd = ac.signal.addEventListener.bind(ac.signal)
+    const origRm = ac.signal.removeEventListener.bind(ac.signal)
+    ;(ac.signal as any).addEventListener = (...args: any[]) => {
+      net++
+      return origAdd(...(args as [any, any, any?]))
+    }
+    ;(ac.signal as any).removeEventListener = (...args: any[]) => {
+      net--
+      return origRm(...(args as [any, any, any?]))
+    }
+    const p = coord.gate({ tool: 't', args: {}, ctx: {} }, 's', 'sess', ac.signal)
+    await new Promise((r) => setTimeout(r, 0))
+    coord.resolve((emit as any).mock.calls[0][0].approvalId, 'once')
+    await p
+    expect(net).toBe(0)
+  })
+
+  it('cancelSession prunes sticky entries for that session', async () => {
+    const { coord, adapter, emit } = makeCoord()
+    // Set up sticky via session reply
+    const p1 = coord.gate({ tool: 't', args: { x: 1 }, ctx: {} }, 's', 'sess')
+    await new Promise((r) => setTimeout(r, 0))
+    coord.resolve((emit as any).mock.calls[0][0].approvalId, 'session')
+    await p1
+    expect((adapter.check as any)).toHaveBeenCalledTimes(1)
+    // Cancel the session — sticky should be wiped
+    coord.cancelSession('sess', 'restart')
+    // Same sessionId + same tool + same args — should re-ask, NOT be sticky-allowed
+    const p2 = coord.gate({ tool: 't', args: { x: 1 }, ctx: {} }, 's', 'sess')
+    await new Promise((r) => setTimeout(r, 0))
+    expect((adapter.check as any)).toHaveBeenCalledTimes(2)
+    coord.resolve((emit as any).mock.calls[1][0].approvalId, 'once')
+    await p2
+  })
+
+  it('cancelSession does not prune sticky entries for other sessions', async () => {
+    const { coord, adapter, emit } = makeCoord()
+    // Set sticky in session A
+    const p1 = coord.gate({ tool: 't', args: {}, ctx: {} }, 's', 'A')
+    await new Promise((r) => setTimeout(r, 0))
+    coord.resolve((emit as any).mock.calls[0][0].approvalId, 'session')
+    await p1
+    // Cancel session B (which has no stickies)
+    coord.cancelSession('B', 'unrelated')
+    // Session A's sticky should still be live
+    const p2 = coord.gate({ tool: 't', args: {}, ctx: {} }, 's', 'A')
+    expect(await p2).toBe('allow')
+    expect((adapter.check as any)).toHaveBeenCalledTimes(1)  // still 1, sticky hit
+  })
 })

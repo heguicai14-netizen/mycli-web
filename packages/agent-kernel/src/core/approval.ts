@@ -53,6 +53,7 @@ export class ApprovalCoordinator {
     if (decision === 'allow' || decision === 'deny') return decision
 
     const approvalId = crypto.randomUUID()
+    let abortHandler: (() => void) | undefined
     const promise = new Promise<'allow' | 'deny'>((resolve, reject) => {
       this.pending.set(approvalId, { resolve, reject, sessionId, req })
     })
@@ -61,20 +62,23 @@ export class ApprovalCoordinator {
         this.pending.delete(approvalId)
         throw signal.reason ?? new Error('aborted')
       }
-      signal.addEventListener(
-        'abort',
-        () => {
-          const d = this.pending.get(approvalId)
-          if (d) {
-            this.pending.delete(approvalId)
-            d.reject(signal.reason ?? new Error('aborted'))
-          }
-        },
-        { once: true },
-      )
+      abortHandler = () => {
+        const d = this.pending.get(approvalId)
+        if (d) {
+          this.pending.delete(approvalId)
+          d.reject(signal.reason ?? new Error('aborted'))
+        }
+      }
+      signal.addEventListener('abort', abortHandler)
     }
     this.opts.emit({ approvalId, req, summary })
-    return promise
+    try {
+      return await promise
+    } finally {
+      if (signal && abortHandler) {
+        signal.removeEventListener('abort', abortHandler)
+      }
+    }
   }
 
   resolve(approvalId: string, reply: ApprovalReplyDecision): void {
@@ -117,6 +121,11 @@ export class ApprovalCoordinator {
         this.pending.delete(id)
         d.reject(new Error(reason))
       }
+    }
+    // Prune sticky entries for this session — prevents replay attacks across
+    // cancel+restart cycles when sessionId is reused.
+    for (const key of this.sticky.keys()) {
+      if (key.startsWith(`${sessionId} `)) this.sticky.delete(key)
     }
   }
 
