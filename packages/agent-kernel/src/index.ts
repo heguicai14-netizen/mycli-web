@@ -117,6 +117,7 @@ export {
   bootKernelOffscreen,
   type BootKernelOffscreenOptions,
 } from './browser/bootKernelOffscreen'
+export { buildActiveTabApprovalContext } from './browser/activeTabContext'
 
 // === browser storage (default IDB-backed conversation/message/audit stores) ===
 export {
