@@ -269,4 +269,71 @@ describe('QueryEngine approval gate', () => {
     expect(out[resultIdx].isError).toBe(true)
     expect((tool.execute as any)).not.toHaveBeenCalled()
   })
+
+  it('falls back gracefully when summarizeArgs throws', async () => {
+    const tool = fakeTool({
+      summarizeArgs: () => { throw new Error('boom') },
+    })
+    const emit = vi.fn()
+    const coord = new ApprovalCoordinator({
+      adapter: { check: vi.fn().mockResolvedValue('ask') },
+      emit,
+    })
+    const client = fakeClient([
+      [
+        { kind: 'done', stopReason: 'tool_calls',
+          toolCalls: [{ id: 'c1', name: 'dangerous', input: { a: 1 } }] },
+      ],
+      [{ kind: 'done', stopReason: 'stop' }],
+    ])
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const engine = new QueryEngine({
+      client, tools: [fakeOpenAiToolSchema], toolDefinitions: [tool],
+      executeTool: tool.execute as any,
+      approvalCoordinator: coord, sessionId: 'sess',
+    })
+    const runP = (async () => {
+      const out: any[] = []
+      for await (const ev of engine.run([{ role: 'user', content: 'go' }])) out.push(ev)
+      return out
+    })()
+    await new Promise((r) => setTimeout(r, 0))
+    expect(emit).toHaveBeenCalledTimes(1)
+    const emitArg = emit.mock.calls[0][0]
+    // Fallback summary should be JSON of args
+    expect(emitArg.summary).toBe(JSON.stringify({ a: 1 }).slice(0, 200))
+    expect(warn).toHaveBeenCalled()
+    coord.resolve(emitArg.approvalId, 'once')
+    await runP
+    warn.mockRestore()
+  })
+
+  it('falls back to {} when buildApprovalContext throws', async () => {
+    const tool = fakeTool()
+    const checkSpy = vi.fn().mockResolvedValue('allow')
+    const coord = new ApprovalCoordinator({
+      adapter: { check: checkSpy },
+      emit: vi.fn(),
+    })
+    const client = fakeClient([
+      [
+        { kind: 'done', stopReason: 'tool_calls',
+          toolCalls: [{ id: 'c1', name: 'dangerous', input: {} }] },
+      ],
+      [{ kind: 'done', stopReason: 'stop' }],
+    ])
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const engine = new QueryEngine({
+      client, tools: [fakeOpenAiToolSchema], toolDefinitions: [tool],
+      executeTool: tool.execute as any,
+      approvalCoordinator: coord, sessionId: 'sess',
+      buildApprovalContext: () => { throw new Error('boom') },
+    })
+    const out: any[] = []
+    for await (const ev of engine.run([{ role: 'user', content: 'go' }])) out.push(ev)
+    expect(checkSpy).toHaveBeenCalled()
+    expect(checkSpy.mock.calls[0][0].ctx).toEqual({})
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
+  })
 })

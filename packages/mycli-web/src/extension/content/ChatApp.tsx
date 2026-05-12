@@ -242,6 +242,7 @@ export function ChatApp() {
 
       client.on('fatalError', (ev: any) => {
         setBusy(false)
+        setPendingApproval(null)
         if (ev.code === 'no_api_key') {
           setErrorBanner({
             text: 'API key not configured. Open Options to set it.',
@@ -353,6 +354,7 @@ export function ChatApp() {
     // 'done' (with stopReason 'cancel' or 'error') and offscreen emits the
     // terminal message/appended. Snapshot sync would also reset it.
     setBusy(false)
+    setPendingApproval(null)
   }
 
   function resetTurnState() {
@@ -367,6 +369,7 @@ export function ChatApp() {
     }
     setBusy(false)
     setErrorBanner(undefined)
+    setPendingApproval(null)
   }
 
   function newConversation() {

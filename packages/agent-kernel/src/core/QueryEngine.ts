@@ -138,10 +138,25 @@ export class QueryEngine {
           if (!this.opts.sessionId) {
             throw new Error('QueryEngine: approvalCoordinator set without sessionId')
           }
-          const ctx = (await this.opts.buildApprovalContext?.(call)) ?? {}
-          const summary = def.summarizeArgs
-            ? def.summarizeArgs(call.input)
-            : JSON.stringify(call.input).slice(0, 200)
+          let ctx: ApprovalContext = {}
+          if (this.opts.buildApprovalContext) {
+            try {
+              ctx = await this.opts.buildApprovalContext(call)
+            } catch (e) {
+              console.warn('[QueryEngine] buildApprovalContext threw, using {}', e)
+            }
+          }
+          let summary: string
+          if (def.summarizeArgs) {
+            try {
+              summary = def.summarizeArgs(call.input)
+            } catch (e) {
+              console.warn('[QueryEngine] summarizeArgs threw, falling back to JSON', e)
+              summary = JSON.stringify(call.input).slice(0, 200)
+            }
+          } else {
+            summary = JSON.stringify(call.input).slice(0, 200)
+          }
           const gateResult = await this.opts.approvalCoordinator.gate(
             { tool: call.name, args: call.input, ctx },
             summary,
