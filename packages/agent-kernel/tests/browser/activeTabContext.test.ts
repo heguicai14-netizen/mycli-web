@@ -43,4 +43,18 @@ describe('buildActiveTabApprovalContext', () => {
     const ctx = await buildActiveTabApprovalContext()
     expect(ctx).toEqual({})
   })
+
+  it('returns url-only when origin is opaque (about:blank)', async () => {
+    ;(globalThis as any).chrome.tabs.query = async () => [{ url: 'about:blank' }]
+    const ctx = await buildActiveTabApprovalContext()
+    expect(ctx.url).toBe('about:blank')
+    expect(ctx.origin).toBeUndefined()
+  })
+
+  it('returns url-only when origin is opaque (data: URI)', async () => {
+    ;(globalThis as any).chrome.tabs.query = async () => [{ url: 'data:text/html,<p>hi</p>' }]
+    const ctx = await buildActiveTabApprovalContext()
+    expect(ctx.url).toBe('data:text/html,<p>hi</p>')
+    expect(ctx.origin).toBeUndefined()
+  })
 })
