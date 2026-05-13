@@ -241,6 +241,50 @@ const RuntimeError = Base.extend({
   stack: z.string().optional(),
 })
 
+const SubagentStarted = Base.extend({
+  kind: z.literal('subagent/started'),
+  subagentId: z.string(),
+  parentTurnId: z.string(),
+  parentCallId: z.string(),
+  subagentType: z.string(),
+  description: z.string(),
+  prompt: z.string(),
+  startedAt: z.number().int().nonnegative(),
+})
+
+const SubagentMessage = Base.extend({
+  kind: z.literal('subagent/message'),
+  subagentId: z.string(),
+  text: z.string(),
+})
+
+const SubagentToolCall = Base.extend({
+  kind: z.literal('subagent/tool_call'),
+  subagentId: z.string(),
+  callId: z.string(),
+  toolName: z.string(),
+  args: z.unknown(),
+})
+
+const SubagentToolEnd = Base.extend({
+  kind: z.literal('subagent/tool_end'),
+  subagentId: z.string(),
+  callId: z.string(),
+  ok: z.boolean(),
+  content: z.unknown().optional(),
+  error: z.object({ code: z.string(), message: z.string() }).optional(),
+})
+
+const SubagentFinished = Base.extend({
+  kind: z.literal('subagent/finished'),
+  subagentId: z.string(),
+  ok: z.boolean(),
+  text: z.string().optional(),
+  error: z.object({ code: z.string(), message: z.string() }).optional(),
+  iterations: z.number().int().nonnegative(),
+  finishedAt: z.number().int().nonnegative(),
+})
+
 const TodoUpdated = Base.extend({
   kind: z.literal('todo/updated'),
   conversationId: Uuid,
@@ -269,6 +313,11 @@ export const AgentEvent = z.discriminatedUnion('kind', [
   StateSnapshot,
   ConversationsList,
   TodoUpdated,
+  SubagentStarted,
+  SubagentMessage,
+  SubagentToolCall,
+  SubagentToolEnd,
+  SubagentFinished,
   PingEvt,
   CommandAck,
   FatalError,
