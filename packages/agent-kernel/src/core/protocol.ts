@@ -100,6 +100,24 @@ const CompactFailed = z.object({
   reason: z.string(),
 })
 
+// Per-conversation todo list snapshot. Emitted by agentService after every
+// successful todoWriteTool call and on conversation switch.
+const TodoUpdated = z.object({
+  kind: z.literal('todo/updated'),
+  conversationId: z.string(),
+  items: z.array(
+    z.object({
+      id: z.string(),
+      subject: z.string(),
+      status: z.enum(['pending', 'in_progress', 'completed']),
+      description: z.string().optional(),
+      activeForm: z.string().optional(),
+      createdAt: z.number().int().nonnegative(),
+      updatedAt: z.number().int().nonnegative(),
+    }),
+  ),
+})
+
 export const AgentEvent = z.discriminatedUnion('kind', [
   StreamChunk,
   ToolStart,
@@ -109,6 +127,7 @@ export const AgentEvent = z.discriminatedUnion('kind', [
   Usage,
   AssistantIter,
   ApprovalRequested,
+  TodoUpdated,
   CompactStarted,
   CompactCompleted,
   CompactFailed,

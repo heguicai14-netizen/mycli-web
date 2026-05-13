@@ -241,6 +241,22 @@ const RuntimeError = Base.extend({
   stack: z.string().optional(),
 })
 
+const TodoUpdated = Base.extend({
+  kind: z.literal('todo/updated'),
+  conversationId: Uuid,
+  items: z.array(
+    z.object({
+      id: z.string(),
+      subject: z.string(),
+      status: z.enum(['pending', 'in_progress', 'completed']),
+      description: z.string().optional(),
+      activeForm: z.string().optional(),
+      createdAt: z.number().int().nonnegative(),
+      updatedAt: z.number().int().nonnegative(),
+    }),
+  ),
+})
+
 export const AgentEvent = z.discriminatedUnion('kind', [
   MessageAppended,
   MessageStreamChunk,
@@ -252,6 +268,7 @@ export const AgentEvent = z.discriminatedUnion('kind', [
   ApprovalRequested,
   StateSnapshot,
   ConversationsList,
+  TodoUpdated,
   PingEvt,
   CommandAck,
   FatalError,

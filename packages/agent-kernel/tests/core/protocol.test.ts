@@ -132,3 +132,83 @@ describe('Core AgentEvent — approval/requested', () => {
     expect(parsed.success).toBe(false)
   })
 })
+
+describe('Core AgentEvent — todo/updated', () => {
+  it('accepts todo/updated with full item shape', () => {
+    const parsed = CoreAgentEvent.safeParse({
+      kind: 'todo/updated',
+      conversationId: 'conv-1',
+      items: [
+        {
+          id: 't1',
+          subject: 'Write tests',
+          status: 'pending',
+          createdAt: 1700000000000,
+          updatedAt: 1700000000000,
+        },
+      ],
+    })
+    expect(parsed.success).toBe(true)
+  })
+
+  it('accepts todo/updated with empty items', () => {
+    const parsed = CoreAgentEvent.safeParse({
+      kind: 'todo/updated',
+      conversationId: 'conv-1',
+      items: [],
+    })
+    expect(parsed.success).toBe(true)
+  })
+
+  it('rejects todo/updated with invalid status', () => {
+    const parsed = CoreAgentEvent.safeParse({
+      kind: 'todo/updated',
+      conversationId: 'conv-1',
+      items: [
+        {
+          id: 't1',
+          subject: 'x',
+          status: 'archived',
+          createdAt: 0,
+          updatedAt: 0,
+        },
+      ],
+    })
+    expect(parsed.success).toBe(false)
+  })
+})
+
+describe('Wire AgentEvent — todo/updated', () => {
+  it('accepts wire todo/updated with envelope + items', () => {
+    const parsed = AgentEvent.safeParse({
+      id: '11111111-1111-4111-8111-111111111111',
+      sessionId: '22222222-2222-4222-8222-222222222222',
+      ts: 1_700_000_000_000,
+      kind: 'todo/updated',
+      conversationId: '33333333-3333-4333-8333-333333333333',
+      items: [
+        {
+          id: 't1',
+          subject: 'A',
+          status: 'in_progress',
+          activeForm: 'Doing A',
+          createdAt: 1,
+          updatedAt: 2,
+        },
+      ],
+    })
+    expect(parsed.success).toBe(true)
+  })
+
+  it('accepts wire todo/updated with empty items', () => {
+    const parsed = AgentEvent.safeParse({
+      id: '11111111-1111-4111-8111-111111111111',
+      sessionId: '22222222-2222-4222-8222-222222222222',
+      ts: 1_700_000_000_000,
+      kind: 'todo/updated',
+      conversationId: '33333333-3333-4333-8333-333333333333',
+      items: [],
+    })
+    expect(parsed.success).toBe(true)
+  })
+})
