@@ -17,6 +17,15 @@ function check(a: HardAssertion, trace: RunTrace, state: Map<string, unknown>): 
     const ok = a.value instanceof RegExp ? a.value.test(trace.finalAnswer) : trace.finalAnswer.includes(a.value)
     return { ok, reason: `answer-contains(${a.value}): actual=${JSON.stringify(trace.finalAnswer.slice(0, 200))}` }
   }
+  if (a.kind === 'answer-not-contains') {
+    const found = a.value instanceof RegExp
+      ? a.value.test(trace.finalAnswer)
+      : trace.finalAnswer.includes(a.value)
+    return {
+      ok: !found,
+      reason: `answer-not-contains(${a.value}): actual=${JSON.stringify(trace.finalAnswer.slice(0, 200))}`,
+    }
+  }
   if (a.kind === 'answer-equals') {
     const ok = trace.finalAnswer === a.value
     return { ok, reason: `answer-equals(${JSON.stringify(a.value)}): actual=${JSON.stringify(trace.finalAnswer)}` }
