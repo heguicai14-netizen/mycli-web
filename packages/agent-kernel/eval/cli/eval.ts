@@ -37,7 +37,7 @@ function buildFilter(s: string | undefined, smoke: boolean): { levels?: any[]; t
   if (!s) return undefined
   if (s.startsWith('id:'))   return { ids:    [s.slice(3)] }
   if (s.startsWith('tag:'))  return { tags:   [s.slice(4)] }
-  if (s === 'L1' || s === 'L2' || s === 'L3') return { levels: [s] }
+  if (s === 'L1' || s === 'L2' || s === 'L3' || s === 'L4') return { levels: [s] }
   return undefined
 }
 

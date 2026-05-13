@@ -1,12 +1,13 @@
 import type { SuiteReport, TaskReport, TraceStep, TaskLevel } from '../types'
 
-const LEVELS: TaskLevel[] = ['L1', 'L2', 'L3']
+const LEVELS: TaskLevel[] = ['L1', 'L2', 'L3', 'L4']
 
 function summaryTable(r: SuiteReport): string {
-  const rows = LEVELS.map((lvl) => {
+  const rows = LEVELS.flatMap((lvl) => {
     const x = r.byLevel[lvl]
+    if (!x) return []
     const sum = x.passed + x.failed
-    return `| ${lvl} | ${x.passed}/${sum} | ${x.meanComposite.toFixed(2)} |`
+    return [`| ${lvl} | ${x.passed}/${sum} | ${x.meanComposite.toFixed(2)} |`]
   })
   return [
     `| Level | Passed | Mean composite |`,

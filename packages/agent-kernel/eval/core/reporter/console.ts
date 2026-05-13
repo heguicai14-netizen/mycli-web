@@ -1,6 +1,6 @@
 import type { SuiteReport, TaskLevel } from '../types'
 
-const LEVELS: TaskLevel[] = ['L1', 'L2', 'L3']
+const LEVELS: TaskLevel[] = ['L1', 'L2', 'L3', 'L4']
 
 function bar(ratio: number, width = 12): string {
   const filled = Math.round(ratio * width)
@@ -20,6 +20,7 @@ export function renderConsole(r: SuiteReport): string {
   lines.push('─'.repeat(45))
   for (const lvl of LEVELS) {
     const lr = r.byLevel[lvl]
+    if (!lr) continue
     const sum = lr.passed + lr.failed
     if (sum === 0) continue
     lines.push(
