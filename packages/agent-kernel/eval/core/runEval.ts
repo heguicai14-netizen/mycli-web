@@ -21,38 +21,89 @@ export interface RunEvalCoreArgs {
   /** Sub-agent types injected into the runner. Enables the Task tool
    *  for L4 tasks. Default = evalSubagentTypes (general-purpose + explore). */
   subagentTypes?: readonly SubagentType[]
+  /** Max number of tasks in flight concurrently. Default 1 = strict serial. */
+  parallel?: number
+  /** Forwarded to runSingleTask. Per-task wall-clock timeout (ms). */
+  taskTimeoutMs?: number
+}
+
+function makeFailedReport(task: Task, err: unknown): TaskReport {
+  const message = err instanceof Error ? err.message : String(err)
+  return {
+    task,
+    trace: {
+      taskId: task.id,
+      steps: [],
+      finalAnswer: '',
+      tokensIn: 0, tokensOut: 0, durationMs: 0,
+      abortReason: 'consumer',
+    },
+    scores: { completion: 0, traceQuality: 0, efficiency: 0, composite: 0 },
+    passed: false,
+    failures: [`runtime: ${message}`],
+  }
 }
 
 export async function runEvalCore(args: RunEvalCoreArgs): Promise<SuiteReport> {
   const startedAt = new Date().toISOString()
-  const reports: TaskReport[] = []
 
+  const parallel = Math.max(1, args.parallel ?? 1)
   const subagentTypes = args.subagentTypes ?? evalSubagentTypes
+  const reports: TaskReport[] = new Array(args.tasks.length)
 
-  for (const task of args.tasks) {
-    const wrappedLlm = args.wrapLlmForTask ? args.wrapLlmForTask(task.id, args.llm) : args.llm
-    // Build per-task FixtureCtx once so we can share its `state` Map between
-    // fake tools (write side) and runHardJudges (read side for state-equals).
-    let perTaskState: Map<string, unknown> = new Map()
-    const buildTools = (t: Task) => {
-      if (args.buildTools) return args.buildTools(t)
-      const loader = args.snapshotDir ? makeFsLoader(args.snapshotDir) : () => undefined
-      const captionLoader = args.snapshotDir ? makeFsLoader(args.snapshotDir) : () => undefined
-      const ctx = makeFixtureCtx(t, loader, captionLoader)
-      perTaskState = ctx.state
-      return allBuiltinFakes.map((f) => f(ctx))
+  async function runOne(item: { task: Task; idx: number }): Promise<void> {
+    const { task, idx } = item
+    try {
+      const wrappedLlm = args.wrapLlmForTask ? args.wrapLlmForTask(task.id, args.llm) : args.llm
+      // Build per-task FixtureCtx once so we can share its `state` Map between
+      // fake tools (write side) and runHardJudges (read side for state-equals).
+      let perTaskState: Map<string, unknown> = new Map()
+      const buildTools = (t: Task) => {
+        if (args.buildTools) return args.buildTools(t)
+        const loader = args.snapshotDir ? makeFsLoader(args.snapshotDir) : () => undefined
+        const captionLoader = args.snapshotDir ? makeFsLoader(args.snapshotDir) : () => undefined
+        const ctx = makeFixtureCtx(t, loader, captionLoader)
+        perTaskState = ctx.state
+        return allBuiltinFakes.map((f) => f(ctx))
+      }
+      const report = await runSingleTask({
+        task,
+        llm: wrappedLlm,
+        judgeLLM: args.judgeLLM,
+        buildTools: () => buildTools(task),
+        subagentTypes,
+        runHardJudges: (t, tr) => runHardJudges(t, tr, perTaskState),
+        runTraceJudges: (t, tr) => runTraceJudges(t, tr),
+        runLlmJudge: (t, tr, j) => runLlmJudge(t, tr, j),
+        taskTimeoutMs: args.taskTimeoutMs,
+      })
+      // The QueryEngine catches LLM-level throws and converts them into a
+      // `done` event with `stopReason: 'error'`, which `collectTrace` maps to
+      // `abortReason: 'consumer'`. Treat that as a runtime failure so the
+      // task is reported as failed even when scoring would otherwise pass it.
+      if (report.trace.abortReason === 'consumer' && report.passed) {
+        reports[idx] = {
+          ...report,
+          passed: false,
+          failures: [...report.failures, 'runtime: llm-error (engine aborted)'],
+        }
+      } else {
+        reports[idx] = report
+      }
+    } catch (err) {
+      reports[idx] = makeFailedReport(task, err)
     }
-    const r = await runSingleTask({
-      task,
-      llm: wrappedLlm,
-      judgeLLM: args.judgeLLM,
-      buildTools: () => buildTools(task),
-      subagentTypes,
-      runHardJudges: (t, tr) => runHardJudges(t, tr, perTaskState),
-      runTraceJudges: (t, tr) => runTraceJudges(t, tr),
-      runLlmJudge: (t, tr, j) => runLlmJudge(t, tr, j),
-    })
-    reports.push(r)
+  }
+
+  const queue = args.tasks.map((task, idx) => ({ task, idx }))
+  const inFlight = new Set<Promise<void>>()
+  while (queue.length > 0 || inFlight.size > 0) {
+    while (inFlight.size < parallel && queue.length > 0) {
+      const item = queue.shift()!
+      const p = runOne(item).finally(() => inFlight.delete(p))
+      inFlight.add(p)
+    }
+    if (inFlight.size > 0) await Promise.race(inFlight)
   }
 
   // ── Aggregate ─────────────────────────────────────────────────
