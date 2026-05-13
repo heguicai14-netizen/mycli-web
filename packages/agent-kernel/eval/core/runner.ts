@@ -63,6 +63,13 @@ export interface RunSingleArgs {
     trace: RunTrace,
     judgeLLM: Pick<OpenAICompatibleClient, 'streamChat'> | undefined,
   ) => Promise<number | undefined>
+  /**
+   * Per-task wall-clock timeout in milliseconds. When elapsed, the task's
+   * abort signal is fired, `trace.abortReason` is set to `'timeout'`, and the
+   * task counts as failed. Default: `300_000` (5 minutes). Use `0` or
+   * `Infinity` to disable.
+   */
+  taskTimeoutMs?: number
 }
 
 export async function runSingleTask(args: RunSingleArgs): Promise<TaskReport> {
@@ -106,10 +113,22 @@ export async function runSingleTask(args: RunSingleArgs): Promise<TaskReport> {
     subagentEvents.push(ev)
   }
 
+  // Per-task wall-clock timeout. When the timer fires, taskAbort triggers and
+  // QueryEngine's signal-aware streamChat path bails out with an AbortError.
+  const timeoutMs = args.taskTimeoutMs ?? 300_000
+  const taskAbort = new AbortController()
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  if (timeoutMs > 0 && Number.isFinite(timeoutMs)) {
+    timeoutId = setTimeout(() => {
+      taskAbort.abort(new Error(`task-timeout after ${timeoutMs}ms`))
+    }, timeoutMs)
+  }
+
   const engine = new QueryEngine({
     client: llm as OpenAICompatibleClient,
     tools: toolDefs,
     toolMaxIterations: task.budget.maxSteps,
+    signal: taskAbort.signal,
     executeTool: async (call) => {
       const def = toolByName.get(call.name)
       if (!def) {
@@ -121,6 +140,7 @@ export async function runSingleTask(args: RunSingleArgs): Promise<TaskReport> {
         conversationId,
         todoStore,
         emitSubagentEvent,
+        signal: taskAbort.signal,
       }
       // Back-door so buildTaskTool's execute() can reach the parent registry
       // for sub-agent tool inheritance. Documented in src/core/subagent/taskTool.ts.
@@ -134,43 +154,63 @@ export async function runSingleTask(args: RunSingleArgs): Promise<TaskReport> {
   })
 
   const startedAt = Date.now()
-  const trace = await collectTrace(
-    engine.run([{ role: 'user', content: task.prompt }]),
-    task.id,
-    startedAt,
-    subagentEvents,
-  )
+  try {
+    const trace = await collectTrace(
+      engine.run([{ role: 'user', content: task.prompt }]),
+      task.id,
+      startedAt,
+      subagentEvents,
+    )
 
-  const hard = args.runHardJudges(task, trace)
-  const traceJ = args.runTraceJudges(task, trace)
-  const llmScore = await args.runLlmJudge(task, trace, args.judgeLLM)
+    // If our per-task timeout fired, override abortReason with 'timeout'.
+    // (collectTrace may infer a different reason from the engine's done event;
+    //  our wall-clock timeout is authoritative when it fired.)
+    if (
+      taskAbort.signal.aborted
+      && taskAbort.signal.reason instanceof Error
+      && /task-timeout/.test(String(taskAbort.signal.reason.message ?? taskAbort.signal.reason))
+    ) {
+      trace.abortReason = 'timeout'
+    }
 
-  const completion = scoreCompletion({
-    hardPassed: hard.passed,
-    hardTotal: hard.total,
-    llmScore,
-    llmWeight: task.judge.llm?.weight ?? 0,
-  })
-  const traceQuality = scoreTraceQuality({
-    callRate: traceJ.callRate,
-    redundancy: traceJ.redundancy,
-    redundancyMax: traceJ.redundancyMax,
-    hadFailure: traceJ.hadFailure,
-    recoveryScore: traceJ.recoveryScore,
-  })
-  const stepCount = trace.steps.filter((s) => s.kind === 'tool-call').length
-  const efficiency = scoreEfficiency(
-    { steps: stepCount, tokens: trace.tokensIn + trace.tokensOut, durMs: trace.durationMs },
-    task.budget,
-  )
-  const comp = composite(completion, traceQuality, efficiency)
-  const threshold = task.passThreshold ?? passThresholdFor(task.level)
+    const hard = args.runHardJudges(task, trace)
+    const traceJ = args.runTraceJudges(task, trace)
+    const llmScore = await args.runLlmJudge(task, trace, args.judgeLLM)
 
-  return {
-    task,
-    trace,
-    scores: { completion, traceQuality, efficiency, composite: comp },
-    passed: passed(completion, comp, threshold),   // completion FIRST — matches T6 fix
-    failures: [...hard.failures, ...traceJ.failures],
+    const completion = scoreCompletion({
+      hardPassed: hard.passed,
+      hardTotal: hard.total,
+      llmScore,
+      llmWeight: task.judge.llm?.weight ?? 0,
+    })
+    const traceQuality = scoreTraceQuality({
+      callRate: traceJ.callRate,
+      redundancy: traceJ.redundancy,
+      redundancyMax: traceJ.redundancyMax,
+      hadFailure: traceJ.hadFailure,
+      recoveryScore: traceJ.recoveryScore,
+    })
+    const stepCount = trace.steps.filter((s) => s.kind === 'tool-call').length
+    const efficiency = scoreEfficiency(
+      { steps: stepCount, tokens: trace.tokensIn + trace.tokensOut, durMs: trace.durationMs },
+      task.budget,
+    )
+    const comp = composite(completion, traceQuality, efficiency)
+    const threshold = task.passThreshold ?? passThresholdFor(task.level)
+
+    // Timeout forces failure regardless of scoring path.
+    const taskPassed = trace.abortReason === 'timeout'
+      ? false
+      : passed(completion, comp, threshold)
+
+    return {
+      task,
+      trace,
+      scores: { completion, traceQuality, efficiency, composite: comp },
+      passed: taskPassed,   // completion FIRST — matches T6 fix
+      failures: [...hard.failures, ...traceJ.failures],
+    }
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId)
   }
 }
