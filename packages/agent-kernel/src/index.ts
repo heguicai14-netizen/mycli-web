@@ -125,6 +125,13 @@ export {
 } from './browser/bootKernelOffscreen'
 export { buildActiveTabApprovalContext } from './browser/activeTabContext'
 
+// === sub-agent types ===
+export {
+  buildSubagentTypeRegistry,
+  type SubagentType,
+  type SubagentTypeRegistry,
+} from './core/subagent'
+
 // === browser storage (default IDB-backed conversation/message/audit stores) ===
 export {
   openDb,

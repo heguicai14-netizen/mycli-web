@@ -12,6 +12,7 @@ import {
   type ToolContextBuilder,
 } from 'agent-kernel'
 import { extensionTools, type ExtensionToolCtx, type ExtensionToolRpc } from '@ext-tools'
+import { allSubagentTypes } from '@ext-tools/subagentTypes'
 import { useSkillTool, readSkillFileTool } from '@ext-skills'
 import { mycliSettingsAdapter } from './settingsAdapter'
 import { mycliApprovalAdapter } from './mycliApprovalAdapter'
@@ -47,6 +48,7 @@ bootKernelOffscreen({
   // Kernel default is just [fetchGetTool]; extend with mycli-web's
   // extension/skill tool sets explicitly.
   tools: [fetchGetTool, ...extensionTools, useSkillTool, readSkillFileTool],
+  subagentTypes: allSubagentTypes,
   approvalAdapter: mycliApprovalAdapter,
   buildApprovalContext,
 })
