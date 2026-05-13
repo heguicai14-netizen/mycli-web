@@ -68,10 +68,36 @@ export interface ToolDefinition<I = unknown, O = unknown, ExtraCtx = Record<stri
 
 export type TodoStatus = 'pending' | 'in_progress' | 'completed'
 
+/** Branded uuid identifying a single sub-agent run. */
+export type SubagentId = string & { readonly __brand: 'SubagentId' }
+
+/** Forward declaration — full schema lives in core/protocol.ts. The execution
+ *  context only needs the call signature, not the type body. */
+export type SubagentEventInput = {
+  kind:
+    | 'subagent/started'
+    | 'subagent/message'
+    | 'subagent/tool_call'
+    | 'subagent/tool_end'
+    | 'subagent/finished'
+  [k: string]: unknown
+}
+
 export interface ToolExecContext {
   signal?: AbortSignal
   /** Per-conversation todo store. Injected by agentService for tools that need it. */
   todoStore?: TodoStoreAdapter
   /** Active conversation id. Undefined for ephemeral turns. */
   conversationId?: ConversationId
+  /** Stable id for the current main-agent turn. agentService generates one per
+   *  runTurn. Sub-agents inherit (and override) via Task tool spawn. */
+  turnId?: string
+  /** Id of the in-flight ToolCall this execution corresponds to. Populated by
+   *  AgentSession's executeTool closure. */
+  callId?: string
+  /** Present only when the current tool call is happening inside a sub-agent. */
+  subagentId?: SubagentId
+  /** Out-of-band emitter for sub-agent lifecycle events. Populated by
+   *  agentService; tools that don't spawn sub-agents ignore this. */
+  emitSubagentEvent?: (ev: SubagentEventInput) => void
 }

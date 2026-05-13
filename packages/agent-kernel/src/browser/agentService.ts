@@ -381,11 +381,22 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
       // ---------- end auto-compaction ----------
 
       const toolContext = await deps.toolContext.build(cid ?? undefined)
-      // Augment with todo-related fields used by todoWriteTool
+      const turnId = crypto.randomUUID()
+      // Augment with todo + subagent fields. emitSubagentEvent forwards
+      // sub-agent lifecycle events through deps.emit with the wire envelope.
       const fullCtx = {
         ...toolContext,
         todoStore: deps.todoStore,
         conversationId: cid ?? undefined,
+        turnId,
+        emitSubagentEvent: (ev: any) => {
+          deps.emit({
+            id: crypto.randomUUID(),
+            sessionId: cmd.sessionId,
+            ts: Date.now(),
+            ...ev,
+          })
+        },
       }
       const filteredTools = cmd.tools
         ? allTools.filter((t) => cmd.tools!.includes(t.name))

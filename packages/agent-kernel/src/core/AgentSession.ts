@@ -60,9 +60,9 @@ export class AgentSession<ExtraCtx = Record<string, never>> {
             error: { code: 'unknown_tool', message: call.name, retryable: false },
           }
         }
-        // Build ctx from caller-provided ExtraCtx; base ToolExecContext has only optional fields.
         const ctx = {
           ...(this.opts.toolContext as object),
+          callId: call.id,
         } as ToolExecContext & ExtraCtx
         return def.execute(call.input as any, ctx)
       },
