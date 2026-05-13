@@ -25,4 +25,11 @@ export type {
   AssistantMessage,
   ToolMessage,
   ContentPart,
+  SubagentId,
 } from './types'
+export {
+  buildSubagentTypeRegistry,
+  buildTaskTool,
+  type SubagentType,
+  type SubagentTypeRegistry,
+} from './subagent'
