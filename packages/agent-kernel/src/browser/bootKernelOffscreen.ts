@@ -126,6 +126,8 @@ export function bootKernelOffscreen(opts: BootKernelOffscreenOptions): void {
         return
       case 'chat/loadConversation':
         await handleLoadConversation(cmd.sessionId, cmd.conversationId)
+        // Forward to agentService so it can emit todo/updated (T4)
+        await agentService.handleCommand?.(cmd as any)
         return
       case 'chat/listConversations':
         await pushConversationsList(cmd.sessionId)
