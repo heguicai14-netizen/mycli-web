@@ -4,7 +4,7 @@ import type { ToolDefinition } from '../../src/core/Tool'
 
 // ── Task definition ─────────────────────────────────────────────
 
-export type TaskLevel = 'L1' | 'L2' | 'L3'
+export type TaskLevel = 'L1' | 'L2' | 'L3' | 'L4'
 
 export type FetchFixture =
   | string
@@ -48,12 +48,19 @@ export type HardAssertion =
   | { kind: 'answer-equals'; value: string }
   | { kind: 'answer-json-path'; path: string; equals: unknown }
   | { kind: 'state-equals'; key: string; value: unknown }
+  | { kind: 'answer-not-contains'; value: string | RegExp }
 
 export type TraceAssertion =
   | { kind: 'tool-called'; name: string; argsMatch?: Record<string, unknown> }
   | { kind: 'tool-not-called'; name: string }
   | { kind: 'tool-order'; sequence: string[]; strict?: boolean }
   | { kind: 'max-redundant-calls'; name: string; max: number }
+  | { kind: 'subagent-spawned'; type?: string; minCount?: number; maxCount?: number }
+  | { kind: 'subagent-not-spawned' }
+  | { kind: 'subagent-parallel'; minCount: number }
+  | { kind: 'subagent-final-ok'; minCount?: number }
+  | { kind: 'todo-written'; minItems?: number }
+  | { kind: 'todo-final-status'; allCompleted?: boolean }
 
 export interface LlmRubric {
   question: string
@@ -65,13 +72,25 @@ export interface LlmRubric {
 
 export type TraceStep =
   | { kind: 'assistant-message'; text: string }
-  | { kind: 'tool-call'; name: string; args: unknown; id: string }
+  | { kind: 'tool-call'; name: string; args: unknown; id: string; batchId?: string }
   | {
       kind: 'tool-result'
       id: string
       ok: boolean
       data?: unknown
       error?: string
+    }
+  | {
+      kind: 'subagent-spawn'
+      subagentId: string
+      type: string
+      prompt: string
+      description: string
+      parentCallId: string
+      ok: boolean
+      finalText?: string
+      error?: { code: string; message: string }
+      iterations: number
     }
 
 export interface RunTrace {
