@@ -22,12 +22,25 @@ interface ConfigModule {
 }
 
 function parseArgs(argv: string[]) {
-  const opts: { filter?: string; record?: boolean; replayFrom?: string; smoke?: boolean } = {}
+  const opts: {
+    filter?: string
+    record?: boolean
+    replayFrom?: string
+    smoke?: boolean
+    parallel?: number
+    taskTimeoutMs?: number
+  } = {}
   for (const a of argv) {
     if (a === '--record') opts.record = true
     else if (a === '--smoke') opts.smoke = true
     else if (a.startsWith('--filter=')) opts.filter = a.slice('--filter='.length)
     else if (a.startsWith('--replay-from=')) opts.replayFrom = a.slice('--replay-from='.length)
+    else if (a.startsWith('--parallel=')) {
+      opts.parallel = Math.max(1, parseInt(a.slice('--parallel='.length), 10) || 1)
+    }
+    else if (a.startsWith('--task-timeout-ms=')) {
+      opts.taskTimeoutMs = Math.max(0, parseInt(a.slice('--task-timeout-ms='.length), 10) || 0)
+    }
   }
   return opts
 }
@@ -72,6 +85,8 @@ async function main() {
   const snapshotDir = path.join(__dirname, '..', 'fixtures', 'snapshots')
   const report = await runEvalCore({
     tasks, llm: baseLlm, judgeLLM, snapshotDir, wrapLlmForTask,
+    parallel: args.parallel,
+    taskTimeoutMs: args.taskTimeoutMs,
   })
   report.llmModel = c.llm.model
 
