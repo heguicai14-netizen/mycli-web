@@ -44,7 +44,7 @@ export async function runEvalCore(args: RunEvalCoreArgs): Promise<SuiteReport> {
   }
 
   // ── Aggregate ─────────────────────────────────────────────────
-  const levels: TaskLevel[] = ['L1', 'L2', 'L3']
+  const levels: TaskLevel[] = ['L1', 'L2', 'L3', 'L4']
   const byLevel = Object.fromEntries(levels.map((l) => [l, { passed: 0, failed: 0, sum: 0, count: 0 }])) as Record<TaskLevel, { passed: number; failed: number; sum: number; count: number }>
   const byTagAcc = new Map<string, { passed: number; failed: number; sum: number; count: number }>()
   let passed = 0, failed = 0, sumComp = 0, sumTok = 0, sumSteps = 0
@@ -77,7 +77,7 @@ export async function runEvalCore(args: RunEvalCoreArgs): Promise<SuiteReport> {
     llmModel: '(unknown)',
     totals: { passed, failed, skipped: 0 },
     byLevel: {
-      L1: finalize(byLevel.L1), L2: finalize(byLevel.L2), L3: finalize(byLevel.L3),
+      L1: finalize(byLevel.L1), L2: finalize(byLevel.L2), L3: finalize(byLevel.L3), L4: finalize(byLevel.L4),
     },
     byTag: Object.fromEntries(Array.from(byTagAcc.entries()).map(([k, v]) => [k, finalize(v)])),
     meanComposite: reports.length === 0 ? 0 : sumComp / reports.length,

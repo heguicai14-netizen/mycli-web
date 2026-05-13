@@ -15,7 +15,10 @@ const W_EFF_DUR    = 0.1
 const LAMBDA_LLM_BASE = 0.3
 
 export function passThresholdFor(level: TaskLevel): number {
-  return level === 'L1' ? 0.7 : level === 'L2' ? 0.6 : 0.5
+  return level === 'L1' ? 0.7
+       : level === 'L2' ? 0.6
+       : level === 'L3' ? 0.5
+       : 0.45
 }
 
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x))
