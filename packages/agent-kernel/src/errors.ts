@@ -61,6 +61,31 @@ export function classifyError(e: unknown): ClassifiedError {
     }
   }
 
+  // Node-style network errors expose a `code` field (ECONNRESET, ECONNREFUSED,
+  // ETIMEDOUT, EAI_AGAIN, EPIPE, ENETUNREACH). These are transient connection
+  // failures — retry is safe and the right move when they happen before any
+  // bytes of the response body are consumed.
+  const nodeCode = (e as any)?.code
+  if (typeof nodeCode === 'string') {
+    const retryableNetCodes = new Set([
+      'ECONNRESET',
+      'ECONNREFUSED',
+      'ETIMEDOUT',
+      'EAI_AGAIN',
+      'EPIPE',
+      'ENETUNREACH',
+      'ENOTFOUND',
+    ])
+    if (retryableNetCodes.has(nodeCode)) {
+      return {
+        code: ErrorCode.Network,
+        message: (e as Error)?.message ?? nodeCode,
+        retryable: true,
+        cause: e,
+      }
+    }
+  }
+
   // Message-pattern matching
   const msg =
     e instanceof Error
@@ -72,6 +97,11 @@ export function classifyError(e: unknown): ClassifiedError {
     return { code: ErrorCode.Timeout, message: msg, retryable: true, cause: e }
   }
   if (e instanceof TypeError && /fetch/i.test(msg)) {
+    return { code: ErrorCode.Network, message: msg, retryable: true, cause: e }
+  }
+  // Bare "ECONNRESET"-style messages (no code field) — common in Node fetch
+  // wrappers that re-throw without preserving the .code field.
+  if (/ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|EPIPE|ENETUNREACH|ENOTFOUND/.test(msg)) {
     return { code: ErrorCode.Network, message: msg, retryable: true, cause: e }
   }
 

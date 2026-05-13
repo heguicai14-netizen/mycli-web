@@ -39,6 +39,17 @@ export interface ClientConfig {
    * function are caught (warning emitted) and treated as cached=undefined.
    */
   usageParser?: UsageParser
+  /**
+   * Total retry attempts for pre-first-chunk errors (network drop, HTTP 5xx,
+   * HTTP 429, timeout before headers). Mid-stream errors are NEVER retried.
+   * Default 2 → up to 3 total fetch attempts.
+   */
+  maxRetries?: number
+  /**
+   * Base delay in ms for exponential backoff between retries.
+   * Default 500 (delays ~500ms, ~2s with jitter).
+   */
+  retryBaseMs?: number
 }
 
 function combineSignals(...signals: (AbortSignal | undefined)[]): AbortSignal | undefined {
@@ -94,27 +105,51 @@ export type StreamEvent =
     }
 
 import { classifyError } from '../errors'
+import { withRetryBackoff } from './retry'
 
 export class OpenAICompatibleClient {
   constructor(private cfg: ClientConfig) {}
 
   async *streamChat(req: ChatRequest): AsyncIterable<StreamEvent> {
+    const maxRetries = this.cfg.maxRetries ?? 2
+    const retryBaseMs = this.cfg.retryBaseMs ?? 500
+
+    // Phase 1: open connection (retry-able). Network errors, HTTP 5xx, 429,
+    // and pre-headers timeouts get retried. Auth (401/403) and other 4xx are
+    // surfaced immediately.
+    let res: Response
     try {
-      yield* this.streamChatInner(req)
+      res = await withRetryBackoff(
+        () => this.openConnection(req),
+        (err) => classifyError(err).retryable,
+        { maxRetries, baseMs: retryBaseMs },
+      )
     } catch (e) {
       const classified = classifyError(e)
-      const wrappedError = Object.assign(new Error(classified.message), {
+      throw Object.assign(new Error(classified.message), {
         code: classified.code,
         retryable: classified.retryable,
         cause: classified.cause,
-        // Preserve HTTP status if present so downstream consumers can still inspect it
         ...(typeof (e as any)?.status === 'number' ? { status: (e as any).status } : {}),
       })
-      throw wrappedError
+    }
+
+    // Phase 2: consume stream (NOT retry-able). Mid-stream errors propagate
+    // — by then the LLM has already emitted some tokens and we can't rewind.
+    try {
+      yield* this.consumeStream(res, req.signal)
+    } catch (e) {
+      const classified = classifyError(e)
+      throw Object.assign(new Error(classified.message), {
+        code: classified.code,
+        retryable: classified.retryable,
+        cause: classified.cause,
+        ...(typeof (e as any)?.status === 'number' ? { status: (e as any).status } : {}),
+      })
     }
   }
 
-  private async *streamChatInner(req: ChatRequest): AsyncIterable<StreamEvent> {
+  private async openConnection(req: ChatRequest): Promise<Response> {
     const url = `${this.cfg.baseUrl.replace(/\/$/, '')}/chat/completions`
     const body: Record<string, unknown> = {
       model: this.cfg.model,
@@ -172,21 +207,28 @@ export class OpenAICompatibleClient {
     }
     if (!res.body) throw new Error('no response body')
 
+    return res
+  }
+
+  private async *consumeStream(
+    res: Response,
+    signal?: AbortSignal,
+  ): AsyncIterable<StreamEvent> {
     // Accumulator for tool_calls (OpenAI streams them in pieces by index)
     const toolAcc = new Map<number, { id: string; name: string; arguments: string }>()
     let finishReason: string | undefined
     let usage: NormalizedUsage | undefined
 
-    const reader = res.body.getReader()
+    const reader = res.body!.getReader()
     // Abort signal → cancel the reader. Real fetch honors AbortSignal natively, but
     // we wire it explicitly so callers (and tests with mocked fetch) get prompt
     // cancellation regardless of how the underlying transport plumbs the signal.
-    if (req.signal) {
+    if (signal) {
       const onAbort = () => {
         reader.cancel().catch(() => {})
       }
-      if (req.signal.aborted) onAbort()
-      else req.signal.addEventListener('abort', onAbort, { once: true })
+      if (signal.aborted) onAbort()
+      else signal.addEventListener('abort', onAbort, { once: true })
     }
     const decoder = new TextDecoder()
     let buffer = ''
