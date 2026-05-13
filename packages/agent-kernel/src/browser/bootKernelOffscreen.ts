@@ -12,6 +12,9 @@ import type { ToolContextBuilder } from '../adapters/ToolContextBuilder'
 import type { ToolDefinition, ToolCall } from '../core/types'
 import type { ApprovalAdapter, ApprovalContext } from '../core/approval'
 import type { TodoStoreAdapter } from '../adapters/TodoStoreAdapter'
+import { createIdbTodoStore } from './storage/createIdbTodoStore'
+import { openDb } from './storage/db'
+import { todoWriteTool } from '../core/tools/todoWrite'
 
 // Sentinel sessionId for runtime-wide events that don't belong to any chat
 // session — same constant the SW-side hub uses for runtime/error fanout.
@@ -26,8 +29,10 @@ export interface BootKernelOffscreenOptions {
   createAgent?: AgentServiceDeps['createAgent']
   approvalAdapter?: ApprovalAdapter
   buildApprovalContext?: (call: ToolCall) => ApprovalContext | Promise<ApprovalContext>
-  /** Per-conversation todo store. T5 will add default-IDB fallback. */
-  todoStore?: TodoStoreAdapter
+  /** Per-conversation todo store. Defaults to createIdbTodoStore using the
+   *  kernel's IDB. Pass null to disable todo support entirely (no default
+   *  applied). */
+  todoStore?: TodoStoreAdapter | null
 }
 
 export function bootKernelOffscreen(opts: BootKernelOffscreenOptions): void {
@@ -71,16 +76,44 @@ export function bootKernelOffscreen(opts: BootKernelOffscreenOptions): void {
     reportRuntimeError(message, reason?.stack)
   })
 
+  // Resolve effective todoStore:
+  //   undefined → lazy-init default IDB store (opened on first use)
+  //   null      → explicitly disabled, no store passed to agentService
+  //   adapter   → consumer-supplied store, used as-is
+  const resolvedTodoStore: TodoStoreAdapter | undefined =
+    opts.todoStore === null
+      ? undefined
+      : opts.todoStore !== undefined
+        ? opts.todoStore
+        : (() => {
+            // Lazy IDB wrapper: defers openDb() until first list/replace call,
+            // keeping bootKernelOffscreen synchronous so chrome.runtime.onConnect
+            // is registered before any async work begins.
+            let storePromise: Promise<TodoStoreAdapter> | null = null
+            const getStore = (): Promise<TodoStoreAdapter> => {
+              if (!storePromise) storePromise = openDb().then((db) => createIdbTodoStore(db))
+              return storePromise
+            }
+            return {
+              async list(conversationId) {
+                return (await getStore()).list(conversationId)
+              },
+              async replace(conversationId, items) {
+                return (await getStore()).replace(conversationId, items)
+              },
+            }
+          })()
+
   const agentService = createAgentService({
     settings: opts.settings,
     emit,
     messageStore: opts.messageStore,
     toolContext: opts.toolContext,
-    tools: opts.tools,
+    tools: [...(opts.tools ?? []), todoWriteTool],
     createAgent: opts.createAgent,
     approvalAdapter: opts.approvalAdapter,
     buildApprovalContext: opts.buildApprovalContext,
-    todoStore: opts.todoStore,
+    todoStore: resolvedTodoStore,
   })
 
   chrome.runtime.onConnect.addListener((port) => {
