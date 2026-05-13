@@ -49,6 +49,27 @@
 
 > 用户决定不跑 3 次取中位数,单次 run 作 baseline。后续若需要更稳定的数据,跑多次取中位即可。
 
+### L1-basic(6/6 pass = **100%**,mean composite = **0.90**)
+
+| Task ID | completion | composite | passed |
+|---|---|---|---|
+| L1/extract-title | 1.00 | **0.74** | ✓ |
+| L1/extract-selection | 1.00 | **0.93** | ✓ |
+| L1/list-tabs | 1.00 | **0.93** | ✓ |
+| L1/get-by-selector | 1.00 | **0.93** | ✓ |
+| L1/fetch-json | 1.00 | **0.95** | ✓ |
+| L1/screenshot-describe | 1.00 | **0.93** | ✓ |
+
+L1 是单 tool 任务,GLM-4.6 全过且分数高,符合预期。
+
+### L2-chain / L3-original 未跑成功
+
+跑 `--filter=L2` 和全 27 任务都在 **L2/issue-summary 或 L3/decomposition 任务卡死**(主进程 0% CPU + 无网络,持续 7+ 分钟无新 replay 文件)。L1 全过 + L3-todo 全过 + L4 5/6 过表明 **runner 主路径 OK**,某个特定任务的 fixture 或 prompt 触发了死锁。**Follow-up**:
+
+- 用 `--filter=id:L2/issue-summary` 等单任务跑,定位哪个具体任务挂
+- 加 wall-clock timeout 让单任务无法无限挂死
+- ECONNRESET 不应炸整个 run — per-task error isolation 也是 follow-up
+
 ### L4-subagent(5/6 pass = **83%**,mean composite = **0.74**)
 
 | Task ID | completion | trace | efficiency | composite | passed | 关键 trace 失败 |
