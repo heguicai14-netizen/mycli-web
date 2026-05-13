@@ -20,6 +20,9 @@ import { task as skillOrchestration } from './L3-complex/skill-orchestration.tas
 import { task as decomposition }      from './L3-complex/decomposition.task'
 import { task as recoverAndReplan }   from './L3-complex/recover-and-replan.task'
 import { task as expGoNoGo }          from './L3-complex/exp-go-no-go.task'
+import { task as planThenEdit }       from './L3-complex/plan-then-edit.task'
+import { task as multiDocSummary }    from './L3-complex/multi-doc-summary.task'
+import { task as refactorWalkthrough } from './L3-complex/refactor-walkthrough.task'
 
 import { task as parallelIssueTriage }    from './L4-subagent/parallel-issue-triage.task'
 import { task as crossPageSynthesis }     from './L4-subagent/cross-page-synthesis.task'
@@ -33,6 +36,7 @@ export const builtinSuite: Suite = [
   issueSummary, crossTabCompare, fetchThenExtract, conditionalBranch,
   multiStepExtract, failThenFallback, expTreatmentReadout, expCrossValidate,
   skillOrchestration, decomposition, recoverAndReplan, expGoNoGo,
+  planThenEdit, multiDocSummary, refactorWalkthrough,
   parallelIssueTriage, crossPageSynthesis, iterativeResearch,
   distractorResistance, failIsolation, overDecompositionTrap,
 ]
@@ -43,6 +47,7 @@ export const smokeIds: string[] = [
       'L1/get-by-selector', 'L1/fetch-json', 'L1/screenshot-describe'],
   'L2/issue-summary',
   'L2/exp-treatment-readout',
+  'L3/plan-then-edit',
   'L4/over-decomposition-trap',
   'L4/parallel-issue-triage',
 ]

@@ -17,11 +17,11 @@ describe('builtinSuite', () => {
       ids.add(t.id)
     }
   })
-  it('has 24 tasks total: 6 L1 + 8 L2 + 4 L3 + 6 L4', () => {
-    expect(builtinSuite).toHaveLength(24)
+  it('has 27 tasks total: 6 L1 + 8 L2 + 7 L3 + 6 L4', () => {
+    expect(builtinSuite).toHaveLength(27)
     expect(builtinSuite.filter((t) => t.level === 'L1')).toHaveLength(6)
     expect(builtinSuite.filter((t) => t.level === 'L2')).toHaveLength(8)
-    expect(builtinSuite.filter((t) => t.level === 'L3')).toHaveLength(4)
+    expect(builtinSuite.filter((t) => t.level === 'L3')).toHaveLength(7)
     expect(builtinSuite.filter((t) => t.level === 'L4')).toHaveLength(6)
   })
   it('smokeIds all map to real tasks', () => {
@@ -29,7 +29,7 @@ describe('builtinSuite', () => {
     for (const id of smokeIds) expect(ids.has(id), id).toBe(true)
   })
   it('filterSuite by level/tag/ids works', () => {
-    expect(filterSuite(builtinSuite, { levels: ['L3'] })).toHaveLength(4)
+    expect(filterSuite(builtinSuite, { levels: ['L3'] })).toHaveLength(7)
     expect(filterSuite(builtinSuite, { tags: ['data-analysis'] })).toHaveLength(3)
     expect(filterSuite(builtinSuite, { ids: ['L1/extract-title'] })).toHaveLength(1)
   })
