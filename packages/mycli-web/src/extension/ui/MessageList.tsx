@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { MessageBubble } from './MessageBubble'
 import { ToolCallCard } from './ToolCallCard'
+import { SubagentCard, type SubagentCardState } from './SubagentCard'
 
 export interface DisplayMessage {
   id: string
@@ -22,9 +23,34 @@ export interface DisplayToolCall {
 interface Props {
   messages: DisplayMessage[]
   toolCalls: DisplayToolCall[]
+  subagents?: Map<string, SubagentCardState>
+  callIdToSubagentId?: Map<string, string>
 }
 
-export function MessageList({ messages, toolCalls }: Props) {
+function renderToolCall(
+  t: DisplayToolCall,
+  subagents: Map<string, SubagentCardState> | undefined,
+  callIdToSubagentId: Map<string, string> | undefined,
+) {
+  if (t.tool === 'Task') {
+    const subagentId = callIdToSubagentId?.get(t.id)
+    const subState = subagentId ? subagents?.get(subagentId) : undefined
+    if (subState) {
+      return <SubagentCard key={t.id} state={subState} />
+    }
+  }
+  return (
+    <ToolCallCard
+      key={t.id}
+      tool={t.tool}
+      args={t.args}
+      status={t.status}
+      result={t.result}
+    />
+  )
+}
+
+export function MessageList({ messages, toolCalls, subagents, callIdToSubagentId }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     ref.current?.scrollTo({ top: ref.current.scrollHeight, behavior: 'smooth' })
@@ -58,28 +84,12 @@ export function MessageList({ messages, toolCalls }: Props) {
           )}
           {toolCalls
             .filter((t) => t.afterMessageId === m.id)
-            .map((t) => (
-              <ToolCallCard
-                key={t.id}
-                tool={t.tool}
-                args={t.args}
-                status={t.status}
-                result={t.result}
-              />
-            ))}
+            .map((t) => renderToolCall(t, subagents, callIdToSubagentId))}
         </div>
       ))}
       {orphanToolCalls.length > 0 && (
         <div className="space-y-2">
-          {orphanToolCalls.map((t) => (
-            <ToolCallCard
-              key={t.id}
-              tool={t.tool}
-              args={t.args}
-              status={t.status}
-              result={t.result}
-            />
-          ))}
+          {orphanToolCalls.map((t) => renderToolCall(t, subagents, callIdToSubagentId))}
         </div>
       )}
     </div>

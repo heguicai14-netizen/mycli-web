@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { MessageList, type DisplayMessage, type DisplayToolCall } from './MessageList'
+import type { SubagentCardState } from './SubagentCard'
 import { Composer } from './Composer'
 import { ConversationList, type ConversationItem } from './ConversationList'
 
@@ -11,6 +12,8 @@ interface ErrorBanner {
 interface Props {
   messages: DisplayMessage[]
   toolCalls: DisplayToolCall[]
+  subagents?: Map<string, SubagentCardState>
+  callIdToSubagentId?: Map<string, string>
   onSend: (text: string) => void
   onStop: () => void
   onNewConversation: () => void
@@ -93,6 +96,8 @@ function ContextBar({ used, limit, thresholdPercent }: ContextBarProps) {
 export function ChatWindow({
   messages,
   toolCalls,
+  subagents,
+  callIdToSubagentId,
   onSend,
   onStop,
   onNewConversation,
@@ -210,7 +215,12 @@ export function ChatWindow({
           </div>
         </div>
       )}
-      <MessageList messages={messages} toolCalls={toolCalls} />
+      <MessageList
+        messages={messages}
+        toolCalls={toolCalls}
+        subagents={subagents}
+        callIdToSubagentId={callIdToSubagentId}
+      />
       <Composer onSend={onSend} onStop={onStop} busy={busy} />
     </div>
   )

@@ -4,6 +4,7 @@ import { ChatWindow } from '../ui/ChatWindow'
 import { ApprovalModal, type PendingApproval } from '../ui/ApprovalModal'
 import { TodoList } from '../ui/TodoList'
 import type { DisplayMessage, DisplayToolCall } from '../ui/MessageList'
+import type { SubagentCardState } from '../ui/SubagentCard'
 import type { TodoItem } from 'agent-kernel'
 import type { ConversationItem } from '../ui/ConversationList'
 import { RpcClient } from 'agent-kernel'
@@ -35,6 +36,8 @@ export function ChatApp() {
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null)
   const [todos, setTodos] = useState<TodoItem[]>([])
+  const [subagents, setSubagents] = useState<Map<string, SubagentCardState>>(new Map())
+  const [callIdToSubagentId, setCallIdToSubagentId] = useState<Map<string, string>>(new Map())
   const clientRef = useRef<RpcClient | null>(null)
   const lastAssistantIdRef = useRef<string | null>(null)
 
@@ -243,6 +246,91 @@ export function ChatApp() {
         )
       })
 
+      client.on('subagent/started' as any, (ev: any) => {
+        setSubagents((prev) => {
+          const next = new Map(prev)
+          next.set(ev.subagentId, {
+            id: ev.subagentId,
+            type: ev.subagentType,
+            description: ev.description,
+            status: 'running',
+            messages: [],
+            toolCalls: new Map(),
+          })
+          return next
+        })
+        setCallIdToSubagentId((prev) => {
+          const next = new Map(prev)
+          next.set(ev.parentCallId, ev.subagentId)
+          return next
+        })
+      })
+
+      client.on('subagent/message' as any, (ev: any) => {
+        setSubagents((prev) => {
+          const cur = prev.get(ev.subagentId)
+          if (!cur) return prev
+          const next = new Map(prev)
+          next.set(ev.subagentId, {
+            ...cur,
+            messages: [...cur.messages, { text: ev.text, ts: ev.ts }],
+          })
+          return next
+        })
+      })
+
+      client.on('subagent/tool_call' as any, (ev: any) => {
+        setSubagents((prev) => {
+          const cur = prev.get(ev.subagentId)
+          if (!cur) return prev
+          const next = new Map(prev)
+          const calls = new Map(cur.toolCalls)
+          calls.set(ev.callId, { name: ev.toolName, args: ev.args })
+          next.set(ev.subagentId, { ...cur, toolCalls: calls })
+          return next
+        })
+      })
+
+      client.on('subagent/tool_end' as any, (ev: any) => {
+        setSubagents((prev) => {
+          const cur = prev.get(ev.subagentId)
+          if (!cur) return prev
+          const next = new Map(prev)
+          const calls = new Map(cur.toolCalls)
+          const existing = calls.get(ev.callId)
+          if (existing) {
+            calls.set(ev.callId, {
+              ...existing,
+              ok: ev.ok,
+              result: ev.content,
+              error: ev.error,
+            })
+          }
+          next.set(ev.subagentId, { ...cur, toolCalls: calls })
+          return next
+        })
+      })
+
+      client.on('subagent/finished' as any, (ev: any) => {
+        setSubagents((prev) => {
+          const cur = prev.get(ev.subagentId)
+          if (!cur) return prev
+          const next = new Map(prev)
+          const status: SubagentCardState['status'] = ev.ok
+            ? 'finished'
+            : ev.error?.code === 'aborted'
+              ? 'aborted'
+              : 'failed'
+          next.set(ev.subagentId, {
+            ...cur,
+            status,
+            finalText: ev.text,
+            error: ev.error,
+          })
+          return next
+        })
+      })
+
       client.on('fatalError', (ev: any) => {
         setBusy(false)
         setPendingApproval(null)
@@ -378,6 +466,8 @@ export function ChatApp() {
     setErrorBanner(undefined)
     setPendingApproval(null)
     setTodos([])
+    setSubagents(new Map())
+    setCallIdToSubagentId(new Map())
   }
 
   function newConversation() {
@@ -425,6 +515,8 @@ export function ChatApp() {
         <ChatWindow
           messages={messages}
           toolCalls={toolCalls}
+          subagents={subagents}
+          callIdToSubagentId={callIdToSubagentId}
           onSend={send}
           onStop={stop}
           onNewConversation={newConversation}
