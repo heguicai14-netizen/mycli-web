@@ -14,7 +14,7 @@ import type { AgentSession as CoreAgentSession } from '../core/AgentSession'
 import type { ChatMessage } from '../core/OpenAICompatibleClient'
 import { OpenAICompatibleClient } from '../core/OpenAICompatibleClient'
 import type { AgentEvent as CoreAgentEvent } from '../core/protocol'
-import type { ToolDefinition, ToolCall } from '../core/types'
+import type { ToolDefinition, ToolCall, SubagentEventInput } from '../core/types'
 import { fetchGetTool } from '../core/tools/fetchGet'
 import { compactMessages } from '../core/compactor'
 import { truncateForLLM } from '../core/truncate'
@@ -389,7 +389,7 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
         todoStore: deps.todoStore,
         conversationId: cid ?? undefined,
         turnId,
-        emitSubagentEvent: (ev: any) => {
+        emitSubagentEvent: (ev: SubagentEventInput) => {
           deps.emit({
             id: crypto.randomUUID(),
             sessionId: cmd.sessionId,
