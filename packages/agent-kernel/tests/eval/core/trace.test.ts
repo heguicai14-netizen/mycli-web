@@ -33,7 +33,7 @@ describe('collectTrace', () => {
     expect(trace.finalAnswer).toBe('The page says hi.')
     expect(trace.steps).toEqual([
       { kind: 'assistant-message', text: 'I will read the page' },
-      { kind: 'tool-call', id: 'c1', name: 'readPage', args: {} },
+      { kind: 'tool-call', id: 'c1', name: 'readPage', args: {}, batchId: 'batch-1' },
       { kind: 'tool-result', id: 'c1', ok: true, data: 'page text' },
       { kind: 'assistant-message', text: 'The page says hi.' },
     ])

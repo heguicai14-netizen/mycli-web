@@ -2,10 +2,15 @@ import type { OpenAICompatibleClient } from '../../src/core/OpenAICompatibleClie
 import type { Task, RunTrace, TraceStep } from '../core/types'
 
 function compactTrace(steps: TraceStep[]): string {
-  return steps.map((s) => {
+  // subagent-spawn steps are not surfaced to the llm-judge prompt in v1.
+  const filtered = steps.filter((s) => s.kind !== 'subagent-spawn')
+  return filtered.map((s) => {
     if (s.kind === 'assistant-message') return `assistant: ${s.text.slice(0, 200)}`
     if (s.kind === 'tool-call') return `→ ${s.name}(${JSON.stringify(s.args).slice(0, 200)})`
-    return `← ${s.ok ? 'ok' : 'err'}: ${s.ok ? String(s.data ?? '').slice(0, 100) : (s.error ?? '').slice(0, 100)}`
+    if (s.kind === 'tool-result') {
+      return `← ${s.ok ? 'ok' : 'err'}: ${s.ok ? String(s.data ?? '').slice(0, 100) : (s.error ?? '').slice(0, 100)}`
+    }
+    return ''
   }).join('\n')
 }
 

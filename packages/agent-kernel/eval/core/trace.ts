@@ -1,4 +1,5 @@
 import type { EngineEvent } from '../../src/core/QueryEngine'
+import type { SubagentEventInput } from '../../src/core/types'
 import type { RunTrace, TraceStep } from './types'
 
 const ABORT_MAP: Record<string, RunTrace['abortReason']> = {
@@ -12,11 +13,16 @@ const ABORT_MAP: Record<string, RunTrace['abortReason']> = {
  * - finalAnswer = text of the last assistant_message_complete
  * - tokens summed across iterations (undefined usage counts as 0)
  * - durationMs measured from collectTrace() invocation
+ * - tool-call steps emitted by the same assistant_message_complete share a
+ *   batchId so judges (e.g. subagent-parallel) can identify a parallel batch.
+ * - subagentEvents (started/finished) are paired into subagent-spawn steps,
+ *   appended at the end of trace.steps.
  */
 export async function collectTrace(
   events: AsyncIterable<EngineEvent>,
   taskId: string,
   startedAt: number = Date.now(),
+  subagentEvents: SubagentEventInput[] = [],
 ): Promise<RunTrace> {
   const trace: RunTrace = {
     taskId,
@@ -26,6 +32,7 @@ export async function collectTrace(
     tokensOut: 0,
     durationMs: 0,
   }
+  let batchCounter = 0
   for await (const ev of events) {
     if (ev.kind === 'assistant_message_complete') {
       if (ev.text) trace.steps.push({ kind: 'assistant-message', text: ev.text })
@@ -34,12 +41,14 @@ export async function collectTrace(
         trace.tokensIn += ev.usage.in
         trace.tokensOut += ev.usage.out
       }
+      const batchId = ev.toolCalls.length > 0 ? `batch-${++batchCounter}` : undefined
       for (const call of ev.toolCalls) {
         trace.steps.push({
           kind: 'tool-call',
           id: call.id,
           name: call.name,
           args: call.input,
+          batchId,
         })
       }
     } else if (ev.kind === 'tool_result') {
@@ -63,6 +72,50 @@ export async function collectTrace(
     }
     // assistant_delta + tool_executing are noise here — intentionally ignored
   }
+
+  // Pair subagent events into subagent-spawn steps (appended at end).
+  const startedById = new Map<string, Record<string, unknown>>()
+  const finishedById = new Map<string, Record<string, unknown>>()
+  for (const ev of subagentEvents) {
+    const sid = String((ev as Record<string, unknown>).subagentId ?? '')
+    if (!sid) continue
+    if (ev.kind === 'subagent/started') {
+      startedById.set(sid, ev as Record<string, unknown>)
+    } else if (ev.kind === 'subagent/finished') {
+      finishedById.set(sid, ev as Record<string, unknown>)
+    }
+  }
+  for (const [sid, started] of startedById) {
+    const finished = finishedById.get(sid)
+    if (finished) {
+      const ok = Boolean(finished.ok)
+      trace.steps.push({
+        kind: 'subagent-spawn',
+        subagentId: sid,
+        type: String(started.subagentType ?? ''),
+        prompt: String(started.prompt ?? ''),
+        description: String(started.description ?? ''),
+        parentCallId: String(started.parentCallId ?? ''),
+        ok,
+        finalText: ok ? String(finished.text ?? '') : undefined,
+        error: !ok ? (finished.error as { code: string; message: string } | undefined) : undefined,
+        iterations: Number(finished.iterations ?? 0),
+      })
+    } else {
+      trace.steps.push({
+        kind: 'subagent-spawn',
+        subagentId: sid,
+        type: String(started.subagentType ?? ''),
+        prompt: String(started.prompt ?? ''),
+        description: String(started.description ?? ''),
+        parentCallId: String(started.parentCallId ?? ''),
+        ok: false,
+        error: { code: 'unfinished', message: 'subagent/started without matching subagent/finished' },
+        iterations: 0,
+      })
+    }
+  }
+
   trace.durationMs = Date.now() - startedAt
   return trace
 }

@@ -17,12 +17,18 @@ function summaryTable(r: SuiteReport): string {
 }
 
 function renderTrace(steps: TraceStep[]): string {
-  return steps.map((s, i) => {
+  // subagent-spawn steps are not rendered in v1 markdown — kept in the trace
+  // for judge consumption only.
+  const filtered = steps.filter((s) => s.kind !== 'subagent-spawn')
+  return filtered.map((s, i) => {
     const n = String(i + 1).padStart(2)
     if (s.kind === 'assistant-message') return `${n}. assistant: ${truncate(s.text, 200)}`
     if (s.kind === 'tool-call') return `${n}. tool-call  ${s.name}(${JSON.stringify(s.args)})`
-    return `${n}. tool-result ok=${s.ok}` +
-      (s.ok ? ` → ${truncate(String(s.data ?? ''), 120)}` : ` ✗ ${truncate(s.error ?? '', 120)}`)
+    if (s.kind === 'tool-result') {
+      return `${n}. tool-result ok=${s.ok}` +
+        (s.ok ? ` → ${truncate(String(s.data ?? ''), 120)}` : ` ✗ ${truncate(s.error ?? '', 120)}`)
+    }
+    return ''
   }).join('\n')
 }
 
