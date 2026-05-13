@@ -16,6 +16,7 @@ export { QueryEngine, type EngineEvent } from './core/QueryEngine'
 export { ToolRegistry } from './core/ToolRegistry'
 export { toOpenAiTool, makeOk, makeError } from './core/Tool'
 export { fetchGetTool } from './core/tools/fetchGet'
+export { todoWriteTool } from './core/tools/todoWrite'
 export { estimateTokens, estimateMessageTokens } from './core/tokenBudget'
 export { AgentEvent } from './core/protocol'
 export type {
@@ -35,6 +36,7 @@ export type {
   AssistantMessage,
   ToolMessage,
   ContentPart,
+  TodoStatus,
 } from './core/types'
 
 // === core: approval flow ===
@@ -100,6 +102,9 @@ export type {
   AppendMessageInput,
   AppendedMessage,
   ToolContextBuilder,
+  TodoItem,
+  TodoWriteInput,
+  TodoStoreAdapter,
 } from './adapters'
 export { createIdbMessageStore } from './browser/storage/createIdbMessageStore'
 

@@ -64,6 +64,12 @@ export interface ToolDefinition<I = unknown, O = unknown, ExtraCtx = Record<stri
   summarizeArgs?: (input: I) => string
 }
 
+export type TodoStatus = 'pending' | 'in_progress' | 'completed'
+
 export interface ToolExecContext {
   signal?: AbortSignal
+  /** Per-conversation todo store. Injected by agentService for tools that need it. */
+  todoStore?: import('../adapters/TodoStoreAdapter').TodoStoreAdapter
+  /** Active conversation id. Undefined for ephemeral turns. */
+  conversationId?: ConversationId
 }

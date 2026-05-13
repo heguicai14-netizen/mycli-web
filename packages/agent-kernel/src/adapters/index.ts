@@ -6,3 +6,8 @@ export type {
   AppendedMessage,
 } from './MessageStoreAdapter'
 export type { ToolContextBuilder } from './ToolContextBuilder'
+export type {
+  TodoItem,
+  TodoWriteInput,
+  TodoStoreAdapter,
+} from './TodoStoreAdapter'
