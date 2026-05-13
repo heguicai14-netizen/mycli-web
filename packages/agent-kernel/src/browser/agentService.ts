@@ -151,15 +151,19 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
         }
       } else if (cmd.kind === 'chat/loadConversation') {
         if (deps.todoStore && cmd.conversationId) {
-          const items = await deps.todoStore.list(cmd.conversationId as string)
-          deps.emit({
-            id: crypto.randomUUID(),
-            sessionId: cmd.sessionId as string,
-            ts: Date.now(),
-            kind: 'todo/updated',
-            conversationId: cmd.conversationId as string,
-            items,
-          })
+          try {
+            const items = await deps.todoStore.list(cmd.conversationId as string)
+            deps.emit({
+              id: crypto.randomUUID(),
+              sessionId: cmd.sessionId as string,
+              ts: Date.now(),
+              kind: 'todo/updated',
+              conversationId: cmd.conversationId as string,
+              items,
+            })
+          } catch (e) {
+            console.warn('[agentService] todoStore.list failed during loadConversation', e)
+          }
         }
       }
     },

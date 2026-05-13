@@ -11,6 +11,7 @@ import type { MessageStoreAdapter } from '../adapters/MessageStoreAdapter'
 import type { ToolContextBuilder } from '../adapters/ToolContextBuilder'
 import type { ToolDefinition, ToolCall } from '../core/types'
 import type { ApprovalAdapter, ApprovalContext } from '../core/approval'
+import type { TodoStoreAdapter } from '../adapters/TodoStoreAdapter'
 
 // Sentinel sessionId for runtime-wide events that don't belong to any chat
 // session — same constant the SW-side hub uses for runtime/error fanout.
@@ -25,6 +26,8 @@ export interface BootKernelOffscreenOptions {
   createAgent?: AgentServiceDeps['createAgent']
   approvalAdapter?: ApprovalAdapter
   buildApprovalContext?: (call: ToolCall) => ApprovalContext | Promise<ApprovalContext>
+  /** Per-conversation todo store. T5 will add default-IDB fallback. */
+  todoStore?: TodoStoreAdapter
 }
 
 export function bootKernelOffscreen(opts: BootKernelOffscreenOptions): void {
@@ -77,6 +80,7 @@ export function bootKernelOffscreen(opts: BootKernelOffscreenOptions): void {
     createAgent: opts.createAgent,
     approvalAdapter: opts.approvalAdapter,
     buildApprovalContext: opts.buildApprovalContext,
+    todoStore: opts.todoStore,
   })
 
   chrome.runtime.onConnect.addListener((port) => {
