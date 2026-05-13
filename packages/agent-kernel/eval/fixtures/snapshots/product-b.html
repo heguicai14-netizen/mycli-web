@@ -1,0 +1,47 @@
+<!-- packages/agent-kernel/eval/fixtures/snapshots/product-b.html -->
+<!--
+  source: synthetic   |   date: 2026-05-13
+  used-by: L4/cross-page-synthesis
+  notes: Product "Cobalt Pad" — features and drawbacks. Pair with product-a.html.
+-->
+<html><head><title>Cobalt Pad — Product Overview</title></head>
+<body>
+  <article>
+    <h1>Cobalt Pad</h1>
+    <p class="tagline">A cloud-native collaborative notebook built for product teams, designers, and managers who need to think together in real time.</p>
+
+    <h2>What it is</h2>
+    <p>Cobalt Pad is a hosted, browser-first notes and documents platform. Every document is a live, multiplayer surface: changes appear in milliseconds, comments thread inline, and the entire history is replayable. Storage is managed entirely by Cobalt — there is no local filesystem layer and no self-hosting option on the standard plan.</p>
+
+    <h2>Key features</h2>
+    <ul>
+      <li><strong>Real-time multiplayer editing.</strong> Up to 100 simultaneous cursors per document with sub-100ms latency on the same continent.</li>
+      <li><strong>Rich-text WYSIWYG editor.</strong> Slash commands, embedded databases, kanban views, and timeline views. No Markdown required (though import/export is supported).</li>
+      <li><strong>Polished native mobile apps.</strong> Full editing on iOS and Android, included in every paid tier.</li>
+      <li><strong>AI assistant built in.</strong> Summarise selections, draft outlines, translate between languages, and ask questions over the contents of a workspace.</li>
+      <li><strong>Granular permissions.</strong> Per-document, per-folder, and per-workspace access controls with SSO, SCIM, and audit logs on the Enterprise tier.</li>
+      <li><strong>Public-share links.</strong> Publish any document as a styled web page with one click; custom domains supported.</li>
+      <li><strong>Massive template gallery.</strong> Over 1,000 community-contributed templates for meeting notes, OKRs, design reviews, runbooks, and more.</li>
+    </ul>
+
+    <h2>Pricing</h2>
+    <p>Free tier limited to 3 collaborators and 50 documents. Team tier $12/user/month. Business tier $20/user/month with SSO. Enterprise pricing on request, includes SCIM, audit logs, and a 99.95% SLA.</p>
+
+    <h2>Drawbacks and known limitations</h2>
+    <ul>
+      <li><strong>Cloud-only.</strong> No self-hosted option on the standard plan; the data lives in Cobalt's infrastructure. The on-prem offering exists but starts at $80,000/year.</li>
+      <li><strong>Vendor lock-in risk.</strong> Documents export to HTML and Markdown, but embedded databases, kanban views, and timeline views do not round-trip cleanly. Migrating off Cobalt typically means rebuilding non-text content from scratch.</li>
+      <li><strong>Requires a network connection for most features.</strong> An "offline mode" exists but is limited to viewing recently opened documents and queueing simple edits; rich features like databases and AI are gated behind connectivity.</li>
+      <li><strong>Pricing scales aggressively with team size.</strong> A 50-person team on the Business tier costs $12,000/year, and seat counts include guests in many cases.</li>
+      <li><strong>Performance degrades on very large documents.</strong> Documents past ~20,000 blocks become noticeably laggy in the editor.</li>
+      <li><strong>No native Vim or Emacs keybindings.</strong> Keyboard power-users will find the editor frustrating; only basic shortcuts are configurable.</li>
+      <li><strong>AI features send content to a third-party provider.</strong> The privacy policy permits this, but some regulated industries cannot use them.</li>
+    </ul>
+
+    <h2>Who it is for</h2>
+    <p>Cobalt Pad is aimed at teams — typically 5 to 500 people — where collaboration, polish, and onboarding speed matter more than data ownership or terminal-grade workflows. New hires are productive within a day; the trade-off is that the company holds your data.</p>
+
+    <h2>Conclusion</h2>
+    <p>If your team's bottleneck is "we need to write things together, quickly, on any device" then Cobalt Pad is one of the best options on the market. If you value local ownership, predictable long-term storage cost, or keyboard-first ergonomics, you will likely find it confining.</p>
+  </article>
+</body></html>

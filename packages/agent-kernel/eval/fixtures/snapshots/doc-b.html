@@ -1,0 +1,32 @@
+<!-- packages/agent-kernel/eval/fixtures/snapshots/doc-b.html -->
+<!--
+  source: synthetic   |   date: 2026-05-13
+  used-by: L3-todo/multi-doc-summary
+  notes: Topic — cache invalidation patterns. Pair with doc-a.html.
+-->
+<html><head><title>Cache Invalidation Patterns</title></head>
+<body>
+  <article>
+    <h1>Cache Invalidation Patterns</h1>
+
+    <p>"There are only two hard things in computer science: cache invalidation and naming things." The joke is funny because it is, in practice, true. Once a cache holds a copy of state that may change at its source, you must decide how that copy is corrected — and every option has trade-offs that ripple through correctness, latency, and operational complexity.</p>
+
+    <h2>Time-based invalidation</h2>
+    <p>The simplest pattern: every cached entry carries a time-to-live (TTL), and once the TTL elapses the entry is considered expired. The cache discards or refetches on next access. TTLs are popular because they require zero coordination — the writer of the underlying data does not need to know the cache exists. The downside is that within the TTL window the cache may serve arbitrarily stale data, which is unacceptable for some workloads (account balances, permissions, feature flags affecting safety).</p>
+
+    <h2>Event-driven invalidation</h2>
+    <p>Here the system that mutates the source of truth publishes an event, and cache nodes subscribed to those events invalidate or update the affected entries. This trades coordination cost for freshness: caches can be near-instantly correct, but you must build, monitor, and reason about the event channel itself. Lost or delayed events become silent staleness bugs.</p>
+
+    <h2>Write-through and write-behind</h2>
+    <p>If the cache sits between the application and the database, the application's writes can flow through the cache. <strong>Write-through</strong> updates the cache and the source synchronously, so the cache is never stale relative to the source. <strong>Write-behind</strong> queues the write and applies it asynchronously, accepting a window of risk in exchange for write latency. Both eliminate the explicit invalidation problem at the cost of locking the application into one cache topology.</p>
+
+    <h2>Versioning and content-addressable keys</h2>
+    <p>A subtle and powerful pattern: bake the version into the cache key. If a user record's key is <code>user:42:v17</code> rather than <code>user:42</code>, then mutating the user bumps the version to <code>v18</code> and the old entry simply becomes unreachable rather than stale. Storage cost goes up — old versions linger until evicted — but invalidation becomes trivial. CDNs use this pattern heavily by including a content hash in asset URLs.</p>
+
+    <h2>Negative caching</h2>
+    <p>An often-forgotten cousin: caching the fact that a lookup returned nothing. This is invaluable for protecting an upstream system from repeated lookups for non-existent keys, but you must invalidate the negative cache when the missing entry is created — a common source of "I added it but the system says it doesn't exist" bugs.</p>
+
+    <h2>Operational rule of thumb</h2>
+    <p>Choose the weakest invalidation strategy your correctness requirements allow. TTL alone is often enough; reach for event-driven only when staleness has real cost. Combine strategies cautiously — every additional invalidation path is another way for the cache and the source of truth to disagree.</p>
+  </article>
+</body></html>

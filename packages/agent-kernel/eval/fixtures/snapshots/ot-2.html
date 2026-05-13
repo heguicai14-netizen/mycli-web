@@ -1,0 +1,35 @@
+<!-- packages/agent-kernel/eval/fixtures/snapshots/ot-2.html -->
+<!--
+  source: synthetic   |   date: 2026-05-13
+  used-by: L4/iterative-research
+  notes: OT deeper dive — TP2, control algorithms, server-centric design.
+-->
+<html><head><title>OT Beyond the Primer: Control Algorithms and the TP2 Puzzle</title></head>
+<body>
+  <article>
+    <h1>OT Beyond the Primer: Control Algorithms and the TP2 Puzzle</h1>
+
+    <p>The introductory account of <strong>Operational Transformation (OT)</strong> presents a tidy picture: define a transformation function, apply it pairwise, watch the replicas converge. The reality is more uncomfortable. The pairwise transformation function is only half of the story — equally important is the <em>control algorithm</em> that decides which ops to transform against which others, and in what order. Most published OT bugs over the past three decades have been in the control algorithm, not in the transformation function itself.</p>
+
+    <h2>The TP2 puzzle</h2>
+    <p>Recall that the transformation function must satisfy <strong>TP1</strong> (two-op convergence) and <strong>TP2</strong> (three-op convergence in a particular pattern). TP2 says, informally, that transforming an op through two concurrent ops should yield the same result regardless of the order in which the two ops are considered. Several influential OT algorithms — including the original adOPTed and GOTO algorithms — were later shown to violate TP2 on adversarial input. The Oster et al. paper "Real time group editors without Operational transformation" (2005) walks through specific counterexamples that motivated much of the subsequent CRDT research.</p>
+
+    <h2>Control algorithm families</h2>
+    <ul>
+      <li><strong>dOPT</strong> — the original algorithm; simple, easy to implement, but has known TP2 problems on three or more concurrent edits.</li>
+      <li><strong>adOPTed</strong> — extends dOPT with explicit history buffers per site; correctness depends on TP2 holding.</li>
+      <li><strong>GOTO / GOT</strong> — uses inclusive and exclusive transformations and tries to handle TP2 by careful history management.</li>
+      <li><strong>SOCT2, SOCT4</strong> — sidestep TP2 by enforcing a total order on operations via a sequencer, reducing the problem to TP1 only.</li>
+      <li><strong>Jupiter / star-topology OT</strong> — assumes a central server that linearises all ops; each client only needs to transform against ops it has not yet acknowledged. This is the model behind Google Docs.</li>
+    </ul>
+
+    <h2>Why star-topology OT works in practice</h2>
+    <p>The Jupiter model is popular for good reason: with a single server linearising operations, you avoid the multi-way concurrency that triggers TP2 entirely. Each client maintains an "outgoing buffer" of ops not yet acknowledged by the server, transforms incoming server ops against that buffer, and sends locally to the server. The server holds the canonical history and broadcasts transformed ops to other clients. Correctness collapses to TP1, which is tractable.</p>
+
+    <h2>Operational complexity</h2>
+    <p>The implementation difficulty of an OT system rarely lives in the transformation function — usually a few dozen lines per op type — but in maintaining the right history at the right level of fidelity to make transformations meaningful. Pruning history aggressively breaks reordering; keeping it forever exhausts memory. Production OT systems often retain a sliding window keyed on the slowest live connection.</p>
+
+    <h2>When to reach for CRDTs instead</h2>
+    <p>If your topology is genuinely decentralised — peer-to-peer, multi-master databases, occasionally-connected mobile devices — the engineering cost of building a correct OT control algorithm typically exceeds the cost of adopting a CRDT. OT remains preferable when you already have a central server and want the smallest possible per-op overhead.</p>
+  </article>
+</body></html>

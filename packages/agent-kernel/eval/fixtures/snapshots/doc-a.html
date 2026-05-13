@@ -1,0 +1,29 @@
+<!-- packages/agent-kernel/eval/fixtures/snapshots/doc-a.html -->
+<!--
+  source: synthetic   |   date: 2026-05-13
+  used-by: L3-todo/multi-doc-summary
+  notes: Topic — caching strategies in distributed systems. Pair with doc-b.html.
+-->
+<html><head><title>Caching Strategies in Distributed Systems</title></head>
+<body>
+  <article>
+    <h1>Caching Strategies in Distributed Systems</h1>
+
+    <p>Caching is the practice of storing the result of an expensive computation or remote lookup somewhere closer and cheaper, so that subsequent reads can avoid repeating the work. In distributed systems the design space is wider than it first appears — the choice of where the cache lives, who writes to it, and when its entries are considered fresh, shapes the latency profile and the failure modes of the whole system.</p>
+
+    <h2>Where the cache lives</h2>
+    <p>The most common topologies are <em>client-side</em>, <em>edge</em>, <em>look-aside</em>, and <em>in-line</em>. A client-side cache lives in the calling process and offers the lowest possible latency, at the cost of stale data after writes elsewhere. An edge cache (CDN) sits in front of the system and is excellent for read-heavy public traffic. A look-aside cache (the classic Redis-or-Memcached deployment) lives next to the application; the application consults it first and falls back to the database on miss. An in-line cache sits transparently between the application and the database and is invalidated by the database itself, which simplifies the application code but complicates operations.</p>
+
+    <h2>Read patterns</h2>
+    <p>The two dominant read patterns are <strong>cache-aside</strong> and <strong>read-through</strong>. Cache-aside puts the application in charge: on a miss, the application reads from the database and populates the cache itself. Read-through hides this behind the cache: the application asks the cache, and the cache asks the database on miss. Cache-aside is more flexible and easier to reason about; read-through is easier to consume but more opinionated.</p>
+
+    <h2>Write patterns</h2>
+    <p>Writes have more options. <strong>Write-through</strong> writes to the cache and the database synchronously, keeping both in lock-step at the cost of latency. <strong>Write-back</strong> writes to the cache first and flushes to the database asynchronously, which is faster but risks losing recently-written data on a cache crash. <strong>Write-around</strong> skips the cache entirely on write and lets reads re-populate naturally; this avoids polluting the cache with rarely-read entries.</p>
+
+    <h2>Expiry policies</h2>
+    <p>Most production caches combine a time-to-live (TTL) with an eviction policy such as LRU or LFU. TTLs are a coarse hedge against staleness — they bound how wrong the cache can be without doing anything else. Eviction policies handle the case where the cache is full and a new entry must displace an old one. The combination is usually good enough; the failure mode to watch is the <em>thundering herd</em>, where many entries expire at the same instant and the database is hit by a burst of requests.</p>
+
+    <h2>Operational concerns</h2>
+    <p>Caches need monitoring on hit rate, miss rate, eviction rate, and tail latency on miss. A cache with a 99% hit rate but a 2-second miss is often slower in aggregate than one with a 95% hit rate and a 50ms miss. Pay attention to the p99, not just the average.</p>
+  </article>
+</body></html>

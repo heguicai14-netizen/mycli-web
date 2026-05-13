@@ -1,0 +1,35 @@
+<!-- packages/agent-kernel/eval/fixtures/snapshots/crdt-2.html -->
+<!--
+  source: synthetic   |   date: 2026-05-13
+  used-by: L4/iterative-research
+  notes: CRDT deeper dive — sequence CRDTs and practical engineering. Pair with crdt-1.html.
+-->
+<html><head><title>Sequence CRDTs and Their Engineering Trade-offs</title></head>
+<body>
+  <article>
+    <h1>Sequence CRDTs and Their Engineering Trade-offs</h1>
+
+    <p>Counters and sets are the textbook examples, but the CRDTs that show up in production systems most often are <em>sequence CRDTs</em> — the data structures behind collaborative rich-text editors. Designing one that is correct, fast, and memory-bounded is much harder than the primer makes it look.</p>
+
+    <h2>The fundamental challenge</h2>
+    <p>A sequence is an ordered list of elements (typically characters in a document). When two replicas concurrently insert at the "same" position — say, both insert a character between positions 5 and 6 — the merge must produce a deterministic order without either replica having observed the other's edit. The trick is to assign each inserted element an identifier that totally orders <em>all</em> possible positions, even ones invented concurrently.</p>
+
+    <h2>Major families</h2>
+    <ul>
+      <li><strong>WOOT</strong> (Without Operational Transformation) — the first widely-cited sequence CRDT. Each character carries unique IDs of its predecessor and successor at insertion time. Correct but memory-heavy and slow for large documents.</li>
+      <li><strong>Logoot / LSEQ</strong> — assign each position a path of integers in a virtual tree. Inserts allocate a new path between the neighbours. Compact in the average case, but adversarial edit patterns can cause path lengths to grow without bound.</li>
+      <li><strong>Treedoc</strong> — positions are nodes in a binary tree. Concurrent inserts become siblings in a deterministic order.</li>
+      <li><strong>RGA</strong> (Replicated Growable Array) — each element has a timestamp and a reference to the element it was inserted after; tombstones mark deletions. Used as the basis of Automerge's text type.</li>
+      <li><strong>Yjs</strong> — a modern, highly-optimised RGA-like CRDT with run-length encoding of adjacent inserts by the same client and aggressive garbage collection of tombstones.</li>
+    </ul>
+
+    <h2>Tombstones and garbage collection</h2>
+    <p>Every sequence CRDT must remember deletions: a removed element cannot simply be dropped, because a concurrent replica might be inserting next to it. The remembered placeholder is called a <em>tombstone</em>. Naively, tombstones accumulate forever and the document grows unboundedly. Practical implementations garbage-collect tombstones once they can prove no concurrent reference can still arrive — usually by reaching causal stability across all known replicas, which requires either a synchronous barrier or a vector-clock check.</p>
+
+    <h2>Performance engineering</h2>
+    <p>For interactive editing, the CRDT must process a local keystroke in well under one frame (~16ms) on documents of millions of characters. Achieving this typically requires: run-length compression of contiguous edits, a separate spatial index for cursor positioning, lazy materialisation of the visible string, and a careful split between the slow merge path and the fast local-edit path. Yjs and Automerge spend most of their engineering effort here, not on the algorithmic core.</p>
+
+    <h2>When not to use a CRDT</h2>
+    <p>If your application's writes are inherently centralised — every write goes through a single authoritative server — an Operational Transformation system, or even simple optimistic locking with retries, may be simpler and faster. CRDTs pay an ongoing complexity tax that is only worth it when peer-to-peer or offline-first semantics are genuinely required.</p>
+  </article>
+</body></html>

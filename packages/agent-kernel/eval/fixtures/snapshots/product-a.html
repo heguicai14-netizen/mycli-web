@@ -1,0 +1,46 @@
+<!-- packages/agent-kernel/eval/fixtures/snapshots/product-a.html -->
+<!--
+  source: synthetic   |   date: 2026-05-13
+  used-by: L4/cross-page-synthesis
+  notes: Product "Lumen Notes" — features and drawbacks. Pair with product-b.html.
+-->
+<html><head><title>Lumen Notes — Product Overview</title></head>
+<body>
+  <article>
+    <h1>Lumen Notes</h1>
+    <p class="tagline">A local-first notes app for engineers who live in the terminal half the day and a browser the other half.</p>
+
+    <h2>What it is</h2>
+    <p>Lumen Notes is a note-taking application that stores every note as a plain Markdown file inside a directory you choose. There is no proprietary database, no required cloud account, and no lock-in: open the directory in any text editor and your data is still there, byte-for-byte. Sync, when enabled, runs through a CRDT layer over your own storage backend (S3-compatible, Dropbox, or a self-hosted server).</p>
+
+    <h2>Key features</h2>
+    <ul>
+      <li><strong>Local-first storage.</strong> Notes are Markdown files on disk. No vendor format.</li>
+      <li><strong>Bi-directional links.</strong> [[wikilink]] syntax with automatic backlink panel and an interactive graph view.</li>
+      <li><strong>Block-level transclusion.</strong> Embed a single paragraph or code block from one note into another and edits stay in sync.</li>
+      <li><strong>Native Vim and Emacs keybindings.</strong> Modal editing is a first-class mode, not a plugin afterthought.</li>
+      <li><strong>Plugin SDK in TypeScript.</strong> Third-party plugins run in a sandboxed worker; the SDK ships with type definitions and an integration-test harness.</li>
+      <li><strong>End-to-end encrypted sync.</strong> Keys never leave the device. Sync is optional and works peer-to-peer or via a relay.</li>
+      <li><strong>Offline-first.</strong> Every feature, including search and link suggestions, works without a network connection.</li>
+    </ul>
+
+    <h2>Pricing</h2>
+    <p>Free for personal use. Pro tier ($8/month) adds the official sync relay, mobile clients, and priority support. A self-hosted license for teams is $200/user/year.</p>
+
+    <h2>Drawbacks and known limitations</h2>
+    <ul>
+      <li><strong>Steep learning curve.</strong> The keybinding-heavy interface is hostile to users who do not already know Vim or Emacs. Onboarding takes most users a full week.</li>
+      <li><strong>No native mobile app on the free tier.</strong> Mobile access requires the Pro subscription, and even then the iOS app is read-mostly with limited editing affordances.</li>
+      <li><strong>Plugin ecosystem is young.</strong> Roughly 80 plugins exist as of this writing, compared with thousands in more established competitors. Common workflows may require writing your own plugin.</li>
+      <li><strong>Real-time collaboration is single-author per file.</strong> The CRDT layer handles merges across devices for the same user, but two humans cannot type into the same note simultaneously the way they can in a Google Doc.</li>
+      <li><strong>Performance degrades past ~50,000 notes.</strong> Search remains usable but the graph view becomes sluggish, and startup time grows roughly linearly.</li>
+      <li><strong>No web client.</strong> Desktop only (macOS, Linux, Windows). The team has stated a web client is "not on the roadmap".</li>
+    </ul>
+
+    <h2>Who it is for</h2>
+    <p>Lumen Notes is aimed at individual technical users — software engineers, researchers, and writers — who value data ownership and keyboard-driven workflows over collaboration features. Teams that need shared real-time editing should look elsewhere.</p>
+
+    <h2>Conclusion</h2>
+    <p>If you already think in Markdown and want a notes app that will outlive any single company's funding round, Lumen Notes is a strong choice. If you primarily collaborate with others in real time, or you need a polished mobile experience out of the box, the trade-offs probably do not work in your favour.</p>
+  </article>
+</body></html>

@@ -1,0 +1,33 @@
+<!-- packages/agent-kernel/eval/fixtures/snapshots/crdt-1.html -->
+<!--
+  source: synthetic   |   date: 2026-05-13
+  used-by: L4/iterative-research
+  notes: CRDT primer. Pair with crdt-2.html (deeper).
+-->
+<html><head><title>CRDTs: A Beginner's Primer</title></head>
+<body>
+  <article>
+    <h1>CRDTs: A Beginner's Primer</h1>
+
+    <p>A <strong>Conflict-free Replicated Data Type</strong>, or <strong>CRDT</strong>, is a data structure designed to be replicated across multiple machines so that each replica can be updated independently and the replicas can be merged later without coordination, always converging on the same final state. CRDTs are the mathematical foundation of much modern collaborative software — multiplayer text editors, offline-first notes apps, and peer-to-peer databases.</p>
+
+    <h2>The problem CRDTs solve</h2>
+    <p>Suppose Alice and Bob both edit the same shopping list while offline. Alice adds "milk". Bob adds "eggs". When they come back online, both edits should appear in the shared list, and crucially, the order in which the merges happen should not change the final outcome. Naive approaches — last-writer-wins on the whole document, for example — would lose one of the edits. CRDTs provide an algebra in which the merge operation is commutative, associative, and idempotent, so the order and number of merges does not matter.</p>
+
+    <h2>State-based vs operation-based</h2>
+    <p>CRDTs come in two flavours. <strong>State-based CRDTs (CvRDTs)</strong> ship the entire current state of a replica when merging; the merge function is a join in a semi-lattice. <strong>Operation-based CRDTs (CmRDTs)</strong> ship individual operations, which must be commutative and delivered to every replica at least once. State-based variants are simpler to reason about; op-based variants are usually more bandwidth-efficient.</p>
+
+    <h2>Common building blocks</h2>
+    <ul>
+      <li><strong>G-Counter</strong> — a grow-only counter, each replica increments its own slot, merge takes the max per slot.</li>
+      <li><strong>PN-Counter</strong> — two G-Counters (positive and negative); the value is positive minus negative.</li>
+      <li><strong>G-Set</strong> — a grow-only set, merge is union.</li>
+      <li><strong>2P-Set</strong> — a set that supports removal by maintaining an "added" set and a "removed" set; once removed, an element cannot be re-added.</li>
+      <li><strong>OR-Set</strong> — an observed-remove set, where each add is tagged with a unique identifier so an element can be re-added after removal.</li>
+      <li><strong>LWW-Element-Set</strong> — last-writer-wins set, using timestamps to break ties.</li>
+    </ul>
+
+    <h2>Where to start reading</h2>
+    <p>The original CRDT paper is "A comprehensive study of Convergent and Commutative Replicated Data Types" by Shapiro, Preguiça, Baquero, and Zawirski (2011). For a gentler introduction, the Hypermerge and Automerge documentation are both approachable and contain working code you can experiment with locally.</p>
+  </article>
+</body></html>

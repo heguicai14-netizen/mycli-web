@@ -1,0 +1,29 @@
+<!-- packages/agent-kernel/eval/fixtures/snapshots/ot-1.html -->
+<!--
+  source: synthetic   |   date: 2026-05-13
+  used-by: L4/iterative-research
+  notes: OT primer. Keywords 'OT' and 'Operational Transformation' must be present.
+-->
+<html><head><title>Operational Transformation (OT): A Beginner's Primer</title></head>
+<body>
+  <article>
+    <h1>Operational Transformation (OT): A Beginner's Primer</h1>
+
+    <p><strong>Operational Transformation</strong>, almost universally abbreviated <strong>OT</strong>, is a family of algorithms for keeping multiple replicas of a shared document in sync as users edit them concurrently. OT predates CRDTs by about two decades and was the technology behind the first widely-used collaborative editor, Jupiter (Xerox PARC), as well as the well-known Google Wave and the original Google Docs.</p>
+
+    <h2>The core idea</h2>
+    <p>The premise of OT is simple: every user edit is expressed as an <em>operation</em> (for example, <code>insert "x" at position 5</code>), and when an operation arrives at a replica that has already applied other operations, the incoming op is <em>transformed</em> against each intervening op so that it produces the right effect on the new state. If Alice inserts at position 5 and Bob, who has not seen Alice's edit yet, inserts at position 3, then Bob's op, when it reaches Alice, applies cleanly at position 3; Alice's op, when it reaches Bob, must be transformed to apply at position 6 (shifted right by Bob's insertion).</p>
+
+    <h2>Why a transformation function</h2>
+    <p>The transformation function, traditionally written <code>T(op_a, op_b)</code>, must satisfy two properties. <strong>TP1</strong> requires that applying <code>op_a</code> then the transformed <code>op_b</code> yields the same state as applying <code>op_b</code> then the transformed <code>op_a</code>; this ensures the two replicas converge. <strong>TP2</strong> is a more subtle condition needed when three or more concurrent ops are present; satisfying TP2 turns out to be remarkably hard, and many published OT algorithms have been shown to violate it.</p>
+
+    <h2>OT vs CRDTs</h2>
+    <p>Both OT and CRDTs solve roughly the same problem (concurrent edits that converge), but they make different design trade-offs. OT typically relies on a central server to assign a total order to operations, which keeps the per-op data structures small and simple but makes truly peer-to-peer or offline-first deployments awkward. CRDTs encode the merge logic into the data itself and need no central authority, at the cost of additional metadata per element.</p>
+
+    <h2>Where OT is still used</h2>
+    <p>Despite the academic ascendancy of CRDTs, OT remains the technology of choice for many production collaborative editors with a star topology: Google Docs, ShareDB, and ot.js all use OT. The combination of a single source of truth (the server) and a comparatively small per-document footprint makes OT a pragmatic fit for SaaS document tools.</p>
+
+    <h2>Recommended starting reading</h2>
+    <p>"Operational Transformation in Real-Time Group Editors" by Sun and Ellis (1998) is the canonical introduction. For an implementer's view, the ShareDB documentation walks through a working OT system in a readable amount of detail.</p>
+  </article>
+</body></html>
