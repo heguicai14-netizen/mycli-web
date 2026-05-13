@@ -24,14 +24,15 @@ export interface BootKernelOffscreenOptions {
   settings: SettingsAdapter
   messageStore: MessageStoreAdapter
   toolContext: ToolContextBuilder
-  tools: ToolDefinition<any, any, any>[]
+  tools?: ToolDefinition<any, any, any>[]
   /** Override createAgent (tests inject fakes). */
   createAgent?: AgentServiceDeps['createAgent']
   approvalAdapter?: ApprovalAdapter
   buildApprovalContext?: (call: ToolCall) => ApprovalContext | Promise<ApprovalContext>
-  /** Per-conversation todo store. Defaults to createIdbTodoStore using the
-   *  kernel's IDB. Pass null to disable todo support entirely (no default
-   *  applied). */
+  /** Per-conversation todo store. Defaults to a lazy IDB-backed adapter
+   *  using the kernel's IDB. Pass null to fully disable todo support —
+   *  both the store and the todoWriteTool registration are skipped, so
+   *  the LLM never sees the tool. */
   todoStore?: TodoStoreAdapter | null
 }
 
@@ -104,12 +105,17 @@ export function bootKernelOffscreen(opts: BootKernelOffscreenOptions): void {
             }
           })()
 
+  const todoEnabled = opts.todoStore !== null
+  const tools = todoEnabled
+    ? [...(opts.tools ?? []), todoWriteTool]
+    : [...(opts.tools ?? [])]
+
   const agentService = createAgentService({
     settings: opts.settings,
     emit,
     messageStore: opts.messageStore,
     toolContext: opts.toolContext,
-    tools: [...(opts.tools ?? []), todoWriteTool],
+    tools,
     createAgent: opts.createAgent,
     approvalAdapter: opts.approvalAdapter,
     buildApprovalContext: opts.buildApprovalContext,
