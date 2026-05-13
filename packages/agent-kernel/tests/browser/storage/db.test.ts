@@ -9,7 +9,7 @@ describe('openDb', () => {
   it('creates all required object stores on first open', async () => {
     const db = await openDb()
     const names = Array.from(db.objectStoreNames).sort()
-    expect(names).toEqual(['auditLog', 'conversations', 'messages', 'skillData', 'skills'].sort())
+    expect(names).toEqual(['auditLog', 'conversations', 'messages', 'skillData', 'skills', 'todos'].sort())
     db.close()
   })
 
@@ -24,7 +24,7 @@ describe('openDb', () => {
     db1.close()
     const db2 = await openDb()
     expect(Array.from(db2.objectStoreNames).sort()).toEqual(
-      ['auditLog', 'conversations', 'messages', 'skillData', 'skills'].sort(),
+      ['auditLog', 'conversations', 'messages', 'skillData', 'skills', 'todos'].sort(),
     )
     db2.close()
   })

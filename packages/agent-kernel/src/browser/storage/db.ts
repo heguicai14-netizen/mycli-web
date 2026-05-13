@@ -1,8 +1,9 @@
 import { openDB, deleteDB, type IDBPDatabase, type DBSchema } from 'idb'
 import type { ConversationId, MessageId, SkillId } from '../../core/types'
+import type { TodoItem } from '../../adapters/TodoStoreAdapter'
 
 export const DB_NAME = 'agent-kernel'
-export const DB_VERSION = 1
+export const DB_VERSION = 2
 
 export interface ConversationRow {
   id: ConversationId
@@ -80,6 +81,13 @@ export interface MycliWebSchema extends DBSchema {
     value: AuditLogRow
     indexes: { 'by-conversation': ConversationId; 'by-time': number }
   }
+  todos: {
+    key: string // conversationId
+    value: {
+      conversationId: string
+      items: TodoItem[]
+    }
+  }
 }
 
 let _db: IDBPDatabase<MycliWebSchema> | null = null
@@ -97,6 +105,9 @@ export async function openDb(): Promise<IDBPDatabase<MycliWebSchema>> {
         const audit = db.createObjectStore('auditLog', { keyPath: 'id' })
         audit.createIndex('by-conversation', 'conversationId', { unique: false })
         audit.createIndex('by-time', 'ts', { unique: false })
+      }
+      if (oldVersion < 2) {
+        db.createObjectStore('todos', { keyPath: 'conversationId' })
       }
     },
   })

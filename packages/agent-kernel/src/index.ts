@@ -107,6 +107,7 @@ export type {
   TodoStoreAdapter,
 } from './adapters'
 export { createIdbMessageStore } from './browser/storage/createIdbMessageStore'
+export { createIdbTodoStore } from './browser/storage/createIdbTodoStore'
 
 // === browser RPC helpers / chrome.* polyfill ===
 export { sendDomOp, callChromeApi } from './browser/domOpClient'
