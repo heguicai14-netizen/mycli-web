@@ -97,9 +97,32 @@ L1 是单 tool 任务,GLM-4.6 全过且分数高,符合预期。
 - ECONNRESET 等暂态错误的自动重试
 - 工作绕过:跑 batch 时控制 `parallel` ≤ 4(`RunOptions.parallel` 已存在,但 CLI 没暴露)
 
-### L3-original 未跑
+### L3-original(3/4 pass = **75%**,mean composite ≈ **0.84**,逐任务跑)
 
-L3 原 4 任务(decomposition / skill-orchestration / recover-and-replan / exp-go-no-go)随全 27 一起挂死,未逐任务定位。**Follow-up**:类似 L2,逐任务跑应该能取到分数。
+| Task ID | composite | passed |
+|---|---|---|
+| L3/decomposition | **0.93** | ✓ |
+| L3/skill-orchestration | **0.99** | ✓ |
+| L3/recover-and-replan | **0.96** | ✓ |
+| L3/exp-go-no-go | **0.47** | ✗ — 真实任务失败 |
+
+### 全 27 任务汇总
+
+| Level | Pass | Mean composite |
+|---|---|---|
+| L1-basic | 6/6 (100%) | **0.90** |
+| L2-chain | 7/8 (87.5%) | **0.84** |
+| L3-complex(original) | 3/4 (75%) | **0.84** |
+| L3-complex(todo,new) | 3/3 (100%) | **0.74** |
+| L4-subagent(new) | 5/6 (83%) | **0.74** |
+| **TOTAL** | **24/27 (89%)** | **≈ 0.83** |
+
+GLM-4.6 在简单任务(L1)上几乎满分,复杂任务(L3/L4)上能力中等。三个真实失败:
+- `L2/exp-treatment-readout` (0.34) — experiment 任务模式
+- `L3/exp-go-no-go` (0.47) — experiment 任务模式
+- `L4/iterative-research` (0.66) — 模型 hallucinate(prompt 不强)
+
+两个 experiment-* 失败暗示 GLM-4.6 在多变量决策类任务上偏弱,值得专门研究。
 
 ### L4-subagent(5/6 pass = **83%**,mean composite = **0.74**)
 
