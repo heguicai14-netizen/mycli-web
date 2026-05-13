@@ -8,9 +8,15 @@ export { runLlmJudge } from './judges/llm-judge'
 export {
   makeFakeReadPage, makeFakeReadSelection, makeFakeQuerySelector,
   makeFakeListTabs, makeFakeScreenshot, makeFakeFetch, makeFakeUseSkill,
+  makeFakeSlowFetch, makeFakeMarkRead, makeFakeGrepFile,
+  makeFakeEditFile, makeFakeListFiles,
   allBuiltinFakes,
 } from './fixtures/tools/index'
 export { makeFixtureCtx, makeFsLoader } from './fixtures/ctx'
+export {
+  generalPurpose, explore, evalSubagentTypes,
+} from './fixtures/subagentTypes'
+export { InMemoryTodoStore } from './core/adapters/inMemoryTodoStore'
 export { renderConsole } from './core/reporter/console'
 export { renderJson } from './core/reporter/json'
 export { renderMarkdown } from './core/reporter/markdown'
