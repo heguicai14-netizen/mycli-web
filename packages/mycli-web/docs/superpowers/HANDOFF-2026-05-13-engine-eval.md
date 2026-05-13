@@ -62,13 +62,44 @@
 
 L1 是单 tool 任务,GLM-4.6 全过且分数高,符合预期。
 
-### L2-chain / L3-original 未跑成功
+### L2-chain(7/8 pass = **87.5%**,mean composite ≈ **0.84**,逐任务跑)
 
-跑 `--filter=L2` 和全 27 任务都在 **L2/issue-summary 或 L3/decomposition 任务卡死**(主进程 0% CPU + 无网络,持续 7+ 分钟无新 replay 文件)。L1 全过 + L3-todo 全过 + L4 5/6 过表明 **runner 主路径 OK**,某个特定任务的 fixture 或 prompt 触发了死锁。**Follow-up**:
+逐任务定位结果:**没有单任务会挂**,批量(8 任务)跑触发 cumulative state issue。
 
-- 用 `--filter=id:L2/issue-summary` 等单任务跑,定位哪个具体任务挂
-- 加 wall-clock timeout 让单任务无法无限挂死
-- ECONNRESET 不应炸整个 run — per-task error isolation 也是 follow-up
+| Task ID | composite | passed |
+|---|---|---|
+| L2/issue-summary | **0.97** | ✓ |
+| L2/cross-tab-compare | **0.97** | ✓ |
+| L2/fetch-then-extract | **0.95** | ✓ |
+| L2/conditional-branch | **0.99** | ✓ |
+| L2/multi-step-extract | **0.88** | ✓ |
+| L2/fail-then-fallback | **0.99** | ✓ |
+| L2/exp-treatment-readout | **0.34** | ✗ — 真实任务失败,非挂死 |
+| L2/exp-cross-validate | **0.64** | ✓ |
+
+### 批量挂死结论 / 待修
+
+测试矩阵:
+- 1 task: ✅
+- 2 tasks(tag:multi-tab): ✅
+- 6 tasks(L4 / L1): ✅
+- 8 tasks(L2): ❌ 挂死
+- 27 tasks(全): ❌ 挂死(ECONNRESET 后)
+
+阈值在 6-8 任务之间,根因疑似:
+1. GLM API 单 IP 连接池有限制
+2. fetch Keep-Alive 连接在某些异常后陷入坏状态(可能与 L2 的 LLM judge 调用密集相关 — L2 大多有 LLM rubric,L1 无)
+3. ECONNRESET 没被 retryable 包,整轮失败
+
+**Follow-up**:
+- per-task wall-clock timeout(单任务超时不卡整个 batch)
+- per-task error isolation(LLM call 抛错只该影响这个 task)
+- ECONNRESET 等暂态错误的自动重试
+- 工作绕过:跑 batch 时控制 `parallel` ≤ 4(`RunOptions.parallel` 已存在,但 CLI 没暴露)
+
+### L3-original 未跑
+
+L3 原 4 任务(decomposition / skill-orchestration / recover-and-replan / exp-go-no-go)随全 27 一起挂死,未逐任务定位。**Follow-up**:类似 L2,逐任务跑应该能取到分数。
 
 ### L4-subagent(5/6 pass = **83%**,mean composite = **0.74**)
 
