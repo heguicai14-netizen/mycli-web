@@ -4,10 +4,12 @@ import { runTraceJudges } from '../judges/trace-shape'
 import { runLlmJudge } from '../judges/llm-judge'
 import { allBuiltinFakes } from '../fixtures/tools/index'
 import { makeFixtureCtx, makeFsLoader } from '../fixtures/ctx'
+import { evalSubagentTypes } from '../fixtures/subagentTypes'
 import type {
   Suite, Task, TaskReport, SuiteReport, TaskLevel,
 } from './types'
 import type { OpenAICompatibleClient } from '../../src/core/OpenAICompatibleClient'
+import type { SubagentType } from '../../src/core/subagent'
 
 export interface RunEvalCoreArgs {
   tasks: Suite
@@ -16,27 +18,37 @@ export interface RunEvalCoreArgs {
   buildTools?: (task: Task) => any[]   // injectable, defaults to allBuiltinFakes via FixtureCtx
   snapshotDir?: string
   wrapLlmForTask?: (taskId: string, llm: Pick<OpenAICompatibleClient, 'streamChat'>) => Pick<OpenAICompatibleClient, 'streamChat'>
+  /** Sub-agent types injected into the runner. Enables the Task tool
+   *  for L4 tasks. Default = evalSubagentTypes (general-purpose + explore). */
+  subagentTypes?: readonly SubagentType[]
 }
 
 export async function runEvalCore(args: RunEvalCoreArgs): Promise<SuiteReport> {
   const startedAt = new Date().toISOString()
   const reports: TaskReport[] = []
 
-  const buildTools = args.buildTools ?? ((task: Task) => {
-    const loader = args.snapshotDir ? makeFsLoader(args.snapshotDir) : () => undefined
-    const captionLoader = args.snapshotDir ? makeFsLoader(args.snapshotDir) : () => undefined
-    const ctx = makeFixtureCtx(task, loader, captionLoader)
-    return allBuiltinFakes.map((f) => f(ctx))
-  })
+  const subagentTypes = args.subagentTypes ?? evalSubagentTypes
 
   for (const task of args.tasks) {
     const wrappedLlm = args.wrapLlmForTask ? args.wrapLlmForTask(task.id, args.llm) : args.llm
+    // Build per-task FixtureCtx once so we can share its `state` Map between
+    // fake tools (write side) and runHardJudges (read side for state-equals).
+    let perTaskState: Map<string, unknown> = new Map()
+    const buildTools = (t: Task) => {
+      if (args.buildTools) return args.buildTools(t)
+      const loader = args.snapshotDir ? makeFsLoader(args.snapshotDir) : () => undefined
+      const captionLoader = args.snapshotDir ? makeFsLoader(args.snapshotDir) : () => undefined
+      const ctx = makeFixtureCtx(t, loader, captionLoader)
+      perTaskState = ctx.state
+      return allBuiltinFakes.map((f) => f(ctx))
+    }
     const r = await runSingleTask({
       task,
       llm: wrappedLlm,
       judgeLLM: args.judgeLLM,
       buildTools: () => buildTools(task),
-      runHardJudges: (t, tr) => runHardJudges(t, tr, new Map()),
+      subagentTypes,
+      runHardJudges: (t, tr) => runHardJudges(t, tr, perTaskState),
       runTraceJudges: (t, tr) => runTraceJudges(t, tr),
       runLlmJudge: (t, tr, j) => runLlmJudge(t, tr, j),
     })
