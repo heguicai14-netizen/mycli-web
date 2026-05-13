@@ -15,6 +15,8 @@ import type { TodoStoreAdapter } from '../adapters/TodoStoreAdapter'
 import { createIdbTodoStore } from './storage/createIdbTodoStore'
 import { openDb } from './storage/db'
 import { todoWriteTool } from '../core/tools/todoWrite'
+import type { SubagentType } from '../core/subagent/SubagentType'
+import { buildSubagentTypeRegistry } from '../core/subagent'
 
 // Sentinel sessionId for runtime-wide events that don't belong to any chat
 // session — same constant the SW-side hub uses for runtime/error fanout.
@@ -34,6 +36,8 @@ export interface BootKernelOffscreenOptions {
    *  both the store and the todoWriteTool registration are skipped, so
    *  the LLM never sees the tool. */
   todoStore?: TodoStoreAdapter | null
+  /** Optional sub-agent type registry. Non-empty array → registers Task tool. */
+  subagentTypes?: readonly SubagentType[]
 }
 
 export function bootKernelOffscreen(opts: BootKernelOffscreenOptions): void {
@@ -110,6 +114,11 @@ export function bootKernelOffscreen(opts: BootKernelOffscreenOptions): void {
     ? [...(opts.tools ?? []), todoWriteTool]
     : [...(opts.tools ?? [])]
 
+  const subagentTypeRegistry =
+    opts.subagentTypes && opts.subagentTypes.length > 0
+      ? buildSubagentTypeRegistry(opts.subagentTypes)
+      : undefined
+
   const agentService = createAgentService({
     settings: opts.settings,
     emit,
@@ -120,6 +129,7 @@ export function bootKernelOffscreen(opts: BootKernelOffscreenOptions): void {
     approvalAdapter: opts.approvalAdapter,
     buildApprovalContext: opts.buildApprovalContext,
     todoStore: resolvedTodoStore,
+    subagentTypeRegistry,
   })
 
   chrome.runtime.onConnect.addListener((port) => {

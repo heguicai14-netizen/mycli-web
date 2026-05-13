@@ -28,6 +28,9 @@ import {
   type ApprovalAdapter,
   type ApprovalContext,
 } from '../core/approval'
+import type { SubagentTypeRegistry } from '../core/subagent/SubagentType'
+import { buildTaskTool } from '../core/subagent/taskTool'
+import { ToolRegistry } from '../core/ToolRegistry'
 
 export type { Settings } from '../adapters/SettingsAdapter'
 
@@ -80,6 +83,8 @@ export interface AgentServiceDeps {
   buildApprovalContext?: (call: ToolCall) => ApprovalContext | Promise<ApprovalContext>
   /** Per-conversation todo store. Required for todoWriteTool to function. */
   todoStore?: TodoStoreAdapter
+  /** Sub-agent type registry. When set, Task tool is appended per turn. */
+  subagentTypeRegistry?: SubagentTypeRegistry
 }
 
 export interface AgentService {
@@ -405,13 +410,28 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
         cmd.system ?? (settings.systemPromptAddendum || undefined)
       const model = cmd.model ?? settings.model
 
+      // Construct the per-turn LLM client once so we can share it with the
+      // Task tool (sub-agents reuse the parent's client; only the model name
+      // is overridable per SubagentType).
+      const llmClient = new OpenAICompatibleClient({
+        apiKey: settings.apiKey,
+        baseUrl: settings.baseUrl,
+        model,
+      })
+
+      // Append Task tool when a sub-agent registry is configured. Task tool
+      // is rebuilt per turn because its description is registry-derived.
+      const finalTools = deps.subagentTypeRegistry
+        ? [...filteredTools, buildTaskTool(deps.subagentTypeRegistry, llmClient)]
+        : filteredTools
+
+      // Expose the parent registry to the Task tool via ctx back-door so it
+      // can derive the sub-agent's filtered child registry.
+      ;(fullCtx as any).__taskParentRegistry = new ToolRegistry(finalTools)
+
       const agent = createAgent({
-        llm: {
-          apiKey: settings.apiKey,
-          baseUrl: settings.baseUrl,
-          model,
-        },
-        tools: filteredTools,
+        llmClient,
+        tools: finalTools,
         toolContext: fullCtx,
         toolMaxIterations: settings.toolMaxIterations,
         systemPrompt,

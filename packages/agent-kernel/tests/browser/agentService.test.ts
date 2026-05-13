@@ -256,7 +256,10 @@ describe('agentService.runTurn', () => {
     })
 
     expect(captured.current.systemPrompt).toBe('override system')
-    expect(captured.current.llm.model).toBe('override-model')
+    // agentService now constructs the OpenAICompatibleClient once and passes
+    // it as `llmClient` so it can be shared with the Task tool. Reach into
+    // the private cfg field (runtime access) to verify the resolved model.
+    expect((captured.current.llmClient as any).cfg.model).toBe('override-model')
   })
 
   it('falls back to global settings when overrides absent', async () => {
@@ -272,7 +275,7 @@ describe('agentService.runTurn', () => {
     await svc.runTurn({ sessionId: 's1', text: 'hi', ephemeral: true })
 
     expect(captured.current.systemPrompt).toBe('global system')
-    expect(captured.current.llm.model).toBe('global-model')
+    expect((captured.current.llmClient as any).cfg.model).toBe('global-model')
   })
 
   it('forwards history (excluding the just-appended user message) to agent.send', async () => {
