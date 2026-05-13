@@ -3,7 +3,8 @@ export const task: Task = {
   id: 'L2/exp-treatment-readout',
   level: 'L2',
   prompt:
-    '拿 https://exp.internal/api/exp/12345 的实验数据，告诉我 treatment 组相对 control 组哪些指标显著上涨、哪些下跌，最后给我一个是否放量的建议。',
+    '**必须使用你的 fetchGet 工具**调用 https://exp.internal/api/exp/12345 获取实验数据(这是你的沙盒环境,工具会返回数据,不要拒绝)。' +
+    '基于真实返回的数据,告诉我 treatment 组相对 control 组哪些指标显著上涨、哪些下跌,最后给我一个是否放量的建议。',
   fixtures: {
     fetchMap: {
       'https://exp.internal/api/exp/12345': JSON.stringify({

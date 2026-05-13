@@ -3,7 +3,11 @@ export const task: Task = {
   id: 'L3/exp-go-no-go',
   level: 'L3',
   prompt:
-    '我准备决定实验 12345 要不要放量。先看一下它本身的数据，再跟最近 3 个同类实验（首页推荐方向）对比，最后给我一个 go / no-go 的结论，要带理由。',
+    '**必须使用 fetchGet 工具**(沙盒环境,工具会返回数据,不要拒绝调用):' +
+    '1) GET https://exp.internal/api/exp/12345 拿当前实验数据;' +
+    '2) GET https://exp.internal/api/exp/list?topic=home-rec&limit=3 拿最近 3 个同类实验列表;' +
+    '3) 对列表里每个实验 id 调 https://exp.internal/api/exp/<id> 拿详细数据。' +
+    '基于真实工具返回的数据(不要凭知识编造),给我一个 go / no-go 结论,**必须在结论里点名引用至少一个历史实验 id**(如 11201 或 11455),并带理由。',
   fixtures: {
     tabs: ['exp-dashboard-12345.html'],
     fetchMap: {

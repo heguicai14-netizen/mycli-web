@@ -2,7 +2,10 @@ import type { Task } from '../../core/types'
 export const task: Task = {
   id: 'L4/iterative-research',
   level: 'L4',
-  prompt: '调研 CRDT 和 OT 两个方向,每方向找 2 篇相关页面,综合给我对比和选型建议。',
+  prompt:
+    '我已经为你准备了 4 个相关页面(crdt-1.html, crdt-2.html, ot-1.html, ot-2.html)。' +
+    '**必须**通过 Task 工具派子 agent 读这些页面(每个方向至少 2 篇),' +
+    '**不要凭你的训练知识回答** — 必须基于这些 fixture 文件的实际内容做对比和选型建议。',
   fixtures: {
     tabs: ['crdt-1.html', 'crdt-2.html', 'ot-1.html', 'ot-2.html'],
   },

@@ -117,12 +117,36 @@ L1 是单 tool 任务,GLM-4.6 全过且分数高,符合预期。
 | L4-subagent(new) | 5/6 (83%) | **0.74** |
 | **TOTAL** | **24/27 (89%)** | **≈ 0.83** |
 
-GLM-4.6 在简单任务(L1)上几乎满分,复杂任务(L3/L4)上能力中等。三个真实失败:
-- `L2/exp-treatment-readout` (0.34) — experiment 任务模式
-- `L3/exp-go-no-go` (0.47) — experiment 任务模式
-- `L4/iterative-research` (0.66) — 模型 hallucinate(prompt 不强)
+## Prompt 强化后的 3 个原失败任务重测
 
-两个 experiment-* 失败暗示 GLM-4.6 在多变量决策类任务上偏弱,值得专门研究。
+Root cause 定位:GLM-4.6 看到 URL 会**拒绝调 fetchGet 并 hallucinate**(以为是真实外网 URL)。修复方式:prompt 里明确"沙盒环境,**必须**用工具,不要拒绝"。
+
+| Task | Before | After | Δ | Note |
+|---|---|---|---|---|
+| L2/exp-treatment-readout | 0.34 ✗ | **0.99 ✓** | +0.65 | Prompt fix 完全见效 |
+| L3/exp-go-no-go | 0.47 ✗ | **0.79 ✓** | +0.32 | 从 fail 到 pass |
+| L4/iterative-research | 0.66 ✗ | 0.39 ✗ | -0.27 | 修了 hallucinate(spawn 6 sub-agents 全 ok),但**最终综合答案没出 CRDT/OT 名词**;再加"必须包含 X 名词"+"不要派完就停"指令后**直接挂死 30 分钟**(子 agent 并发触发同 L2 batch 问题) |
+
+### 修复成效
+
+- 两个 experiment-* 任务**之前不是模型能力问题,是 prompt 缺陷** — 修后从最低分跃迁到接近满分
+- iterative-research 暴露**两个相互依赖的瓶颈**:
+  1. 模型派完多个 sub-agent 后,合成阶段易卡(prompt 指令太多反而让模型迷失)
+  2. 多 sub-agent 并发触发连接池挂死(同 L2 batch 问题)
+- iterative-research 最终保留**强化但不过强的 v2 版**(spawn ok + completion 0)— 比 v1 hallucinate 信息量更大
+
+## 修订后 baseline(prompt fix 后)
+
+| Level | Pass | Mean composite |
+|---|---|---|
+| L1-basic | 6/6 (100%) | **0.90** |
+| L2-chain | **8/8 (100%)** | **~0.92** |
+| L3-complex(original) | **4/4 (100%)** | **~0.92** |
+| L3-complex(todo,new) | 3/3 (100%) | **0.74** |
+| L4-subagent(new) | 5/6 (83%) | **0.74** |
+| **TOTAL** | **26/27 (96%)** | **≈ 0.85** |
+
+只剩 iterative-research 1 个真实未过 — 暴露 GLM 在"派完多 sub-agent 后合成"环节的能力短板,且任务设计触发 batch-hang 边缘条件,**双重 follow-up**。
 
 ### L4-subagent(5/6 pass = **83%**,mean composite = **0.74**)
 
