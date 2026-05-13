@@ -118,6 +118,55 @@ const TodoUpdated = z.object({
   ),
 })
 
+// --- Sub-agent / Fork events (see core/subagent/) ---
+
+const SubagentStarted = z.object({
+  kind: z.literal('subagent/started'),
+  subagentId: z.string(),
+  parentTurnId: z.string(),
+  parentCallId: z.string(),
+  subagentType: z.string(),
+  description: z.string(),
+  prompt: z.string(),
+  startedAt: z.number().int().nonnegative(),
+})
+
+const SubagentMessage = z.object({
+  kind: z.literal('subagent/message'),
+  subagentId: z.string(),
+  text: z.string(),
+  ts: z.number().int().nonnegative(),
+})
+
+const SubagentToolCall = z.object({
+  kind: z.literal('subagent/tool_call'),
+  subagentId: z.string(),
+  callId: z.string(),
+  toolName: z.string(),
+  args: z.unknown(),
+  ts: z.number().int().nonnegative(),
+})
+
+const SubagentToolEnd = z.object({
+  kind: z.literal('subagent/tool_end'),
+  subagentId: z.string(),
+  callId: z.string(),
+  ok: z.boolean(),
+  content: z.unknown().optional(),
+  error: z.object({ code: z.string(), message: z.string() }).optional(),
+  ts: z.number().int().nonnegative(),
+})
+
+const SubagentFinished = z.object({
+  kind: z.literal('subagent/finished'),
+  subagentId: z.string(),
+  ok: z.boolean(),
+  text: z.string().optional(),
+  error: z.object({ code: z.string(), message: z.string() }).optional(),
+  iterations: z.number().int().nonnegative(),
+  finishedAt: z.number().int().nonnegative(),
+})
+
 export const AgentEvent = z.discriminatedUnion('kind', [
   StreamChunk,
   ToolStart,
@@ -128,6 +177,11 @@ export const AgentEvent = z.discriminatedUnion('kind', [
   AssistantIter,
   ApprovalRequested,
   TodoUpdated,
+  SubagentStarted,
+  SubagentMessage,
+  SubagentToolCall,
+  SubagentToolEnd,
+  SubagentFinished,
   CompactStarted,
   CompactCompleted,
   CompactFailed,
