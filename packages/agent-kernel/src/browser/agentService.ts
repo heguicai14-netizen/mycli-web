@@ -22,6 +22,7 @@ import { estimateMessageTokens, estimateTokens } from '../core/tokenBudget'
 import type { SettingsAdapter } from '../adapters/SettingsAdapter'
 import type { MessageStoreAdapter, MessageRecord } from '../adapters/MessageStoreAdapter'
 import type { ToolContextBuilder } from '../adapters/ToolContextBuilder'
+import type { TodoStoreAdapter, TodoItem } from '../adapters/TodoStoreAdapter'
 import {
   ApprovalCoordinator,
   type ApprovalAdapter,
@@ -77,6 +78,8 @@ export interface AgentServiceDeps {
   approvalCoordinator?: ApprovalCoordinator
   /** Build ApprovalContext for each tool call. */
   buildApprovalContext?: (call: ToolCall) => ApprovalContext | Promise<ApprovalContext>
+  /** Per-conversation todo store. Required for todoWriteTool to function. */
+  todoStore?: TodoStoreAdapter
 }
 
 export interface AgentService {
@@ -88,9 +91,9 @@ export interface AgentService {
     input: RunTurnInput,
     onAbortable?: (cancel: () => void) => void,
   ): Promise<void>
-  /** Dispatch a non-turn ClientCmd (e.g. approval/reply). Unrecognised kinds
-   *  are silently ignored. */
-  handleCommand?(cmd: { kind: string; [k: string]: unknown }): void
+  /** Dispatch a non-turn ClientCmd (e.g. approval/reply, chat/loadConversation).
+   *  Unrecognised kinds are silently ignored. */
+  handleCommand?(cmd: { kind: string; [k: string]: unknown }): void | Promise<void>
 }
 
 export function createAgentService(deps: AgentServiceDeps): AgentService {
@@ -134,7 +137,7 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
       : undefined)
 
   return {
-    handleCommand(cmd) {
+    async handleCommand(cmd) {
       if (cmd.kind === 'approval/reply') {
         if (coordinator) {
           coordinator.resolve(
@@ -145,6 +148,18 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
           console.warn(
             '[agentService] approval/reply received but no coordinator configured',
           )
+        }
+      } else if (cmd.kind === 'chat/loadConversation') {
+        if (deps.todoStore && cmd.conversationId) {
+          const items = await deps.todoStore.list(cmd.conversationId as string)
+          deps.emit({
+            id: crypto.randomUUID(),
+            sessionId: cmd.sessionId as string,
+            ts: Date.now(),
+            kind: 'todo/updated',
+            conversationId: cmd.conversationId as string,
+            items,
+          })
         }
       }
     },
@@ -362,6 +377,12 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
       // ---------- end auto-compaction ----------
 
       const toolContext = await deps.toolContext.build(cid ?? undefined)
+      // Augment with todo-related fields used by todoWriteTool
+      const fullCtx = {
+        ...toolContext,
+        todoStore: deps.todoStore,
+        conversationId: cid ?? undefined,
+      }
       const filteredTools = cmd.tools
         ? allTools.filter((t) => cmd.tools!.includes(t.name))
         : allTools
@@ -376,7 +397,7 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
           model,
         },
         tools: filteredTools,
-        toolContext,
+        toolContext: fullCtx,
         toolMaxIterations: settings.toolMaxIterations,
         systemPrompt,
         toolMaxOutputChars: settings.toolMaxOutputChars,
@@ -400,6 +421,10 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
       let currentPendingId: string | null = null
       let currentPendingCreatedAt = 0
       let lastAssistantId: string | null = null
+      // Tracks in-flight tool call names by callId so tool/end can look up
+      // which tool produced a given result (tool/end itself doesn't carry the
+      // tool name, only the callId).
+      const inFlightTools = new Map<string, string>()
 
       async function openAssistantRow(): Promise<{ id: string; createdAt: number }> {
         const createdAt = Date.now()
@@ -491,6 +516,7 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
               })
             }
           } else if (ev.kind === 'tool/start') {
+            inFlightTools.set(ev.toolCall.id, ev.toolCall.tool)
             deps.emit({
               id: crypto.randomUUID(),
               sessionId: cmd.sessionId,
@@ -499,6 +525,8 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
               toolCall: ev.toolCall,
             })
           } else if (ev.kind === 'tool/end') {
+            const toolName = inFlightTools.get(ev.toolCallId)
+            inFlightTools.delete(ev.toolCallId)
             // Persist the tool result as its own row so future turns can
             // replay it back to the LLM in canonical OpenAI shape.
             if (!ephemeral) {
@@ -529,6 +557,28 @@ export function createAgentService(deps: AgentServiceDeps): AgentService {
               toolCallId: ev.toolCallId,
               result: ev.result,
             })
+            // Surface todoWrite completion as a dedicated wire event so the
+            // UI can rebuild from the canonical items list without having to
+            // parse tool results.
+            if (toolName === 'todoWrite' && cid && ev.result?.ok) {
+              let items: TodoItem[] = []
+              try {
+                const parsed = JSON.parse(ev.result.content) as {
+                  items?: TodoItem[]
+                }
+                items = parsed?.items ?? []
+              } catch {
+                // If parse fails, skip emit
+              }
+              deps.emit({
+                id: crypto.randomUUID(),
+                sessionId: cmd.sessionId,
+                ts: Date.now(),
+                kind: 'todo/updated',
+                conversationId: cid,
+                items,
+              })
+            }
           } else if (ev.kind === 'done') {
             // Defensive: if a final pending row somehow survived (no
             // assistant/iter ever closed it — shouldn't happen with the

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { createAgentService } from 'agent-kernel'
 import type { AgentEvent as CoreAgentEvent, ToolDefinition } from 'agent-kernel'
 import { ApprovalCoordinator } from 'agent-kernel'
+import type { TodoStoreAdapter, TodoItem } from 'agent-kernel'
 
 // Minimal fake AgentSession that yields a scripted stream of agent-core events.
 function makeFakeAgent(events: CoreAgentEvent[]) {
@@ -48,6 +49,7 @@ function makeDeps(opts: {
   tools?: ToolDefinition<any, any, any>[]
   capturedAgentOpts?: { current: any }
   approvalCoordinator?: ApprovalCoordinator
+  todoStore?: TodoStoreAdapter
 }) {
   const events: any[] = []
   const idbCalls: string[] = []
@@ -92,6 +94,7 @@ function makeDeps(opts: {
       return fake.session as any
     }),
     approvalCoordinator: opts.approvalCoordinator,
+    todoStore: opts.todoStore,
   }
 
   return { deps, events, idbCalls, fake, messageStore }
@@ -923,5 +926,117 @@ describe('agentService approval flow', () => {
       's1',
       expect.any(String),
     )
+  })
+})
+
+// ---------- TodoStore / todo/updated integration ----------
+
+const stubTodoStore = (overrides: Partial<TodoStoreAdapter> = {}): TodoStoreAdapter => ({
+  list: vi.fn().mockResolvedValue([]),
+  replace: vi.fn().mockResolvedValue([]),
+  ...overrides,
+})
+
+describe('agentService todo flow', () => {
+  it('emits wire todo/updated after a successful todoWrite tool call', async () => {
+    const canonical: TodoItem[] = [
+      { id: 't1', subject: 'A', status: 'pending', createdAt: 1, updatedAt: 1 },
+    ]
+    const todoStore = stubTodoStore({
+      replace: vi.fn().mockResolvedValue(canonical),
+    })
+    const { deps, events } = makeDeps({
+      todoStore,
+      agentEvents: [
+        {
+          kind: 'tool/start',
+          toolCall: { id: 'tc1', tool: 'todoWrite', args: { items: [{ subject: 'A', status: 'pending' }] } },
+        },
+        {
+          kind: 'tool/end',
+          toolCallId: 'tc1',
+          result: {
+            ok: true,
+            content: JSON.stringify({ count: 1, items: canonical }),
+          },
+        },
+        { kind: 'done', stopReason: 'end_turn', assistantText: '' },
+      ] as any[],
+    })
+    const svc = createAgentService(deps as any)
+    await svc.runTurn({ sessionId: 's1', text: 'do it' })
+    const todoEvt = events.find((e) => e.kind === 'todo/updated')
+    expect(todoEvt).toBeDefined()
+    expect(todoEvt.conversationId).toBeDefined()
+    expect(todoEvt.items).toEqual(canonical)
+  })
+
+  it('does NOT emit todo/updated for non-todoWrite tools', async () => {
+    const todoStore = stubTodoStore()
+    const { deps, events } = makeDeps({
+      todoStore,
+      agentEvents: [
+        {
+          kind: 'tool/start',
+          toolCall: { id: 'tc1', tool: 'readPage', args: {} },
+        },
+        {
+          kind: 'tool/end',
+          toolCallId: 'tc1',
+          result: { ok: true, content: 'page content' },
+        },
+        { kind: 'done', stopReason: 'end_turn', assistantText: '' },
+      ] as any[],
+    })
+    const svc = createAgentService(deps as any)
+    await svc.runTurn({ sessionId: 's1', text: 'read' })
+    const todoEvt = events.find((e) => e.kind === 'todo/updated')
+    expect(todoEvt).toBeUndefined()
+  })
+
+  it('does NOT emit todo/updated when todoWrite tool returns ok: false', async () => {
+    const todoStore = stubTodoStore()
+    const { deps, events } = makeDeps({
+      todoStore,
+      agentEvents: [
+        {
+          kind: 'tool/start',
+          toolCall: { id: 'tc1', tool: 'todoWrite', args: { items: [] } },
+        },
+        {
+          kind: 'tool/end',
+          toolCallId: 'tc1',
+          result: { ok: false, content: '{"code":"todo_persist_failed","message":"idb boom"}' },
+        },
+        { kind: 'done', stopReason: 'end_turn', assistantText: '' },
+      ] as any[],
+    })
+    const svc = createAgentService(deps as any)
+    await svc.runTurn({ sessionId: 's1', text: 'do it' })
+    const todoEvt = events.find((e) => e.kind === 'todo/updated')
+    expect(todoEvt).toBeUndefined()
+  })
+
+  it('emits initial todo/updated when a conversation is loaded', async () => {
+    const initial: TodoItem[] = [
+      { id: 't1', subject: 'X', status: 'pending', createdAt: 1, updatedAt: 1 },
+    ]
+    const todoStore = stubTodoStore({
+      list: vi.fn().mockResolvedValue(initial),
+    })
+    const { deps, events } = makeDeps({
+      todoStore,
+    })
+    const svc = createAgentService(deps as any)
+    await svc.handleCommand?.({
+      id: crypto.randomUUID(),
+      sessionId: 's1',
+      ts: Date.now(),
+      kind: 'chat/loadConversation',
+      conversationId: 'cv1',
+    } as any)
+    const todoEvt = events.find((e) => e.kind === 'todo/updated')
+    expect(todoEvt).toBeDefined()
+    expect(todoEvt.items).toEqual(initial)
   })
 })
