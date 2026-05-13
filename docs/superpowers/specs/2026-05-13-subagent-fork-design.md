@@ -1,166 +1,164 @@
-# Sub-agent / Fork — Design Spec
+# Sub-agent / Fork —— 设计稿
 
-**Date:** 2026-05-13
-**Sub-project:** #4 of mycli-web agent capability roadmap
-**Status:** Approved, ready for plan
+**日期:** 2026-05-13
+**Sub-project:** mycli-web agent 能力路线图 #4
+**状态:** 已批准,可进入 plan 阶段
 
-## 1. Goals & Non-Goals
+## 1. 目标与非目标
 
-### Goals
+### 目标(in-scope)
 
-1. **Spawn mechanism in kernel** — Main agent can call `Task` tool to spawn an independent sub-agent that runs its own LLM chat loop with isolated context. Sub-agent's final assistant text becomes the `Task` tool result. Multiple `Task` calls in the same main-agent turn execute concurrently via the LLM's parallel-tool-calls feature; the kernel does not invent its own concurrency layer.
-2. **Consumer-driven `SubagentType` registry** — Kernel exposes a registration shape `{ name, description, systemPrompt, allowedTools, maxIterations?, model?, maxConcurrent? (reserved) }`. Kernel ships **zero** built-in types. Consumer injects an array of types into `bootKernelOffscreen({ subagentTypes })`.
-3. **Full UI transparency** — Sub-agent's internal messages, tool calls, and tool results are streamed to the UI via new `subagent/*` `AgentEvent` variants. Each event carries `subagentId`, and `subagent/started` additionally carries `parentTurnId` and `parentCallId` so the UI can attach the sub-agent card to the correct main-agent tool-call card.
-4. **Data isolation** — Each sub-agent receives a fresh `subagentId` used as its `ToolExecContext.conversationId`, isolating TodoWrite state per sub-agent. Approval rules and settings remain shared (global).
-5. **Portable** — Zero `mycli-web` assumptions. Any browser-extension consumer can call `bootKernelOffscreen` with its own subagent types and get a working `Task` tool. mycli-web ships one reference type (`general-purpose`) as the v1 example.
-6. **mycli-web UI** — Expandable sub-agent card inside the Shadow-DOM chat panel. Parallel sub-agents render side-by-side.
+1. **kernel 提供 spawn 机制** —— 主 agent 可调用 `Task` tool 派生独立子 agent。子 agent 跑自己的 LLM chat loop,context 完全隔离,最终的 assistant 文字作为 `Task` tool 的 result 返回。主 agent 同一 turn 内多次调用 `Task` 时,通过 LLM 原生的 parallel-tool-calls 能力天然并发执行;kernel 不再发明额外的并发层。
+2. **由 consumer 定义的 `SubagentType` 注册** —— kernel 暴露注册形状 `{ name, description, systemPrompt, allowedTools, maxIterations?, model?, maxConcurrent?(预留) }`。kernel **零内置类型**,consumer 把类型数组通过 `bootKernelOffscreen({ subagentTypes })` 注入。
+3. **完整 UI 透明** —— 子 agent 内部每条 message、tool call、tool result 都通过新增的 `subagent/*` `AgentEvent` 变体广播。每个事件带 `subagentId`;`subagent/started` 额外带 `parentTurnId` 和 `parentCallId`,让 UI 能把子 agent 卡片挂到正确的主 agent tool-call 卡片下面。
+4. **数据隔离** —— 每个子 agent 拿独立 `subagentId` 作为 `ToolExecContext.conversationId`,隔离 TodoWrite 状态。Approval 规则和 settings 仍**共享**(全局)。
+5. **可迁移** —— 零 `mycli-web` 假设。任何浏览器扩展 consumer 都可以调 `bootKernelOffscreen` 时塞自己的 subagent 类型,直接获得一个能用的 `Task` tool。mycli-web v1 注册 1 个 reference 类型(`general-purpose`)作为示范。
+6. **mycli-web UI** —— 在 Shadow-DOM 聊天面板里渲染可展开的子 agent 卡片。并发的多个子 agent 并排展示。
 
-### Non-Goals (v1)
+### 非目标(v1 不做)
 
-- **Recursive spawning.** Sub-agent's tool registry has `Task` filtered out unconditionally.
-- **Persistence of intermediate sub-agent messages.** Only the final `tool_result` text (which is part of the main conversation) is persisted via existing `MessageStoreAdapter`. Event schema carries `subagentId` / `parentTurnId` / `parentCallId` so consumers can subscribe and persist if they want — kernel does not.
-- **Wall-clock timeout.** `fetchTimeoutMs` (per request) + `maxIterations` (per sub-agent) + manual cancel cover this.
-- **Cross–SW-restart resume.** If the offscreen document is torn down mid-run, in-flight sub-agents are treated as aborted.
-- **Sub-agent loading skills, sub-sub-agents, independent model providers.** Deferred.
-- **`maxConcurrent` enforcement.** Field reserved in `SubagentType` for future use; v1 leaves it unread.
+- **递归 spawn**。子 agent 的 tool registry 无条件 filter 掉 `Task`。
+- **子 agent 中间消息持久化**。只有最终 `tool_result` 文字(它本来就是主对话的一部分)通过现有 `MessageStoreAdapter` 落盘。事件 schema 带 `subagentId` / `parentTurnId` / `parentCallId` 字段,留给 consumer 自己订阅并落盘 —— kernel 不管。
+- **wall-clock 超时**。`fetchTimeoutMs`(每次请求级)+ `maxIterations`(每个子 agent 级)+ 用户手动取消已经覆盖,不需要全局 timeout。
+- **跨 service-worker 重启续跑**。offscreen 文档销毁 → 进行中的子 agent 视为 aborted。
+- **子 agent 加载 skills、子-子 agent、独立 LLM provider**。统统延后。
+- **`maxConcurrent` 强制执行**。`SubagentType` 字段位预留,v1 不读取。
 
-## 2. Architecture Overview
+## 2. 架构总览
 
-### 2.1 Code layout
+### 2.1 代码分布
 
 ```
-packages/agent-kernel/                        ← all kernel changes
+packages/agent-kernel/                        ← 所有 kernel 改动
 ├── src/core/
-│   ├── subagent/                             ← NEW
-│   │   ├── SubagentType.ts                   ← type def + registry builder
-│   │   ├── Subagent.ts                       ← single-run executor
-│   │   ├── taskTool.ts                       ← factory: build Task tool from registry
+│   ├── subagent/                             ← 新目录
+│   │   ├── SubagentType.ts                   ← 类型定义 + registry 构造器
+│   │   ├── Subagent.ts                       ← 单次运行器
+│   │   ├── taskTool.ts                       ← 工厂:基于 registry 构 Task tool
 │   │   └── index.ts
-│   ├── types.ts                              ← add SubagentId, extend ToolExecContext
-│   ├── protocol.ts                           ← add 5 AgentEvent variants
+│   ├── types.ts                              ← 加 SubagentId,扩 ToolExecContext
+│   ├── protocol.ts                           ← 加 5 个 AgentEvent 变体
 │   └── index.ts                              ← re-export SubagentType, SubagentId
 ├── src/browser/
-│   ├── agentService.ts                       ← forward Subagent events → AgentEvents
-│   ├── bootKernelOffscreen.ts                ← accept subagentTypes, register Task tool
-│   └── rpc/protocol.ts                       ← wire variants (5)
-└── tests/core/subagent/…                     ← 4–5 test files
+│   ├── agentService.ts                       ← forward Subagent 事件 → AgentEvent
+│   ├── bootKernelOffscreen.ts                ← 接收 subagentTypes,装配 Task tool
+│   └── rpc/protocol.ts                       ← wire 端 5 个变体
+└── tests/core/subagent/…                     ← 4–5 个测试文件
 
 packages/mycli-web/                           ← reference consumer
-├── src/extension-tools/subagentTypes/        ← NEW
+├── src/extension-tools/subagentTypes/        ← 新目录
 │   ├── generalPurpose.ts
 │   └── index.ts
-├── src/extension/offscreen.ts                ← pass subagentTypes into boot
+├── src/extension/offscreen.ts                ← 把 subagentTypes 传进 boot
 ├── src/extension/ui/
-│   ├── SubagentCard.tsx                      ← NEW
-│   ├── MessageList.tsx or ToolCallCard.tsx   ← route Task tool calls → SubagentCard
-│   └── ChatApp.tsx                           ← subscribe subagent/* events, state map
-└── tests/extension/…                         ← 1–2 integration tests
+│   ├── SubagentCard.tsx                      ← 新组件
+│   ├── MessageList.tsx 或 ToolCallCard.tsx   ← 把 Task tool call 路由到 SubagentCard
+│   └── ChatApp.tsx                           ← 订阅 subagent/* 事件,维护 state map
+└── tests/extension/…                         ← 1–2 个集成测试
 ```
 
-### 2.2 Data flow (main agent dispatches 2 Tasks in one turn)
+### 2.2 数据流(主 agent 在同一 turn 派 2 个 Task)
 
 ```
-Main QueryEngine
-  ├─ LLM emits 2 tool_use blocks (Task, Task)
-  ├─ ToolRegistry.execute("Task", …) × 2     ← already Promise.all in current code
-  │   each Task call:
-  │     ├─ resolve type from registry
+主 QueryEngine
+  ├─ LLM 输出 2 个 tool_use block(Task, Task)
+  ├─ ToolRegistry.execute("Task", …) × 2     ← 当前代码已经是 Promise.all
+  │   每次 Task 调用:
+  │     ├─ 从 registry resolve 出 type
   │     ├─ new Subagent({ id, parentTurnId, parentCallId, type, … }).run()
-  │     │     ├─ filter Task out of parent's toolRegistry, intersect with allowedTools
-  │     │     ├─ build child ToolExecContext (conversationId = subagentId, …)
-  │     │     ├─ build child AgentSession (system = type.systemPrompt, first user = prompt)
-  │     │     ├─ child AbortController, parent.signal → child.signal
+  │     │     ├─ 从主 toolRegistry filter 掉 Task,与 allowedTools 取交集
+  │     │     ├─ 构造 child ToolExecContext(conversationId = subagentId,…)
+  │     │     ├─ 构造 child AgentSession(system = type.systemPrompt,首条 user = prompt)
+  │     │     ├─ child AbortController,parent.signal → child.signal
   │     │     ├─ child QueryEngine.run()
   │     │     │     ├─ emit subagent/started
-  │     │     │     ├─ for each LLM step: emit subagent/message / subagent/tool_call / subagent/tool_end
-  │     │     │     └─ on completion: emit subagent/finished
-  │     │     └─ return final assistant text → ToolResult.ok({ data: text })
+  │     │     │     ├─ 每个 LLM step: emit subagent/message / subagent/tool_call / subagent/tool_end
+  │     │     │     └─ 结束时: emit subagent/finished
+  │     │     └─ 返回最终 assistant 文字 → ToolResult.ok({ data: text })
   │     ↓
-  │   2 ToolResults return to Main QueryEngine
-  └─ Main LLM sees both tool_results and continues
+  │   两个 ToolResult 回到主 QueryEngine
+  └─ 主 LLM 看到两个 tool_result,继续推理
 ```
 
-Key: `Subagent` re-uses `QueryEngine` — no new agent loop is invented. It just builds a fresh session with filtered tools, fresh conversationId, and a child AbortSignal.
+关键:`Subagent` **复用** `QueryEngine`,不发明新 loop —— 它只是构造一个 fresh session(filtered tools、新的 conversationId、child AbortSignal)。
 
-## 3. Public API
+## 3. 公共 API
 
-### 3.1 `SubagentType` (in `core/subagent/SubagentType.ts`)
+### 3.1 `SubagentType`(`core/subagent/SubagentType.ts`)
 
 ```ts
 export interface SubagentType {
-  /** LLM-facing type name. Must match /^[a-z][a-z0-9_-]*$/. Used as Task input enum. */
+  /** LLM 看到的类型名。须匹配 /^[a-z][a-z0-9_-]*$/。作为 Task input 的 enum */
   readonly name: string
 
-  /** 1-2 sentence description shown in Task tool's description to help the LLM pick a type. */
+  /** 1-2 句话:LLM 用来决定选什么 type。会被拼进 Task tool description */
   readonly description: string
 
-  /** Sub-agent's system prompt. Fully consumer-defined. */
+  /** 子 agent 的 system prompt。完全 consumer 定义 */
   readonly systemPrompt: string
 
   /**
-   * Whitelist of tool names the sub-agent may use.
-   * Task tool is *always* filtered out (recursion is forbidden).
-   * '*' means "all of the parent's tools, minus Task".
-   * Otherwise, intersected with what the parent has.
+   * 子 agent 可用的 tool 名字白名单。
+   * Task tool 一定会被 filter 掉(禁递归)。
+   * '*' 表示"主 agent 的全部 tool 减 Task";否则与主 agent 现有 tool 取交集。
    */
   readonly allowedTools: '*' | readonly string[]
 
-  /** Override default max iterations. Falls back to QueryEngine default. */
+  /** 覆盖默认 maxIterations(不传则用 QueryEngine 默认值) */
   readonly maxIterations?: number
 
-  /** Override the model name. Shares the parent's OpenAI client (baseUrl/apiKey). */
+  /** 覆盖 model 名字。共享主 agent 的 OpenAI client(baseUrl/apiKey 不变) */
   readonly model?: string
 
-  /** Reserved for future use. v1 does NOT enforce this. */
+  /** 预留给未来扩展。v1 不强制执行 */
   readonly maxConcurrent?: number
 }
 
 export type SubagentTypeRegistry = ReadonlyMap<string, SubagentType>
 
-/** Throws on duplicate names or invalid name format. */
+/** 重名或名字格式非法时抛错 */
 export function buildSubagentTypeRegistry(
   types: readonly SubagentType[],
 ): SubagentTypeRegistry
 ```
 
-### 3.2 `bootKernelOffscreen` options
+### 3.2 `bootKernelOffscreen` 新增选项
 
 ```ts
 interface BootKernelOffscreenOptions {
-  // …existing fields
+  // …已有字段
   /**
-   * Optional. When provided (non-empty), registers the `Task` tool driven by
-   * this registry. When omitted or empty, no Task tool is registered and the
-   * kernel behaves exactly as today.
+   * 可选。非空数组 → 注册 Task tool(以此 registry 驱动)。
+   * 不传或空数组 → 不注册 Task tool,kernel 行为与今日完全相同。
    */
   subagentTypes?: readonly SubagentType[]
 }
 ```
 
-### 3.3 `ToolExecContext` extension (`core/types.ts`)
+### 3.3 `ToolExecContext` 扩展(`core/types.ts`)
 
 ```ts
 export type SubagentId = string & { readonly __brand: 'SubagentId' }
 
 export interface ToolExecContext {
-  // …existing
-  /** Present only when the current tool call is happening inside a sub-agent. */
+  // …已有字段
+  /** 仅当 tool 调用发生在子 agent 内部时存在;主 agent 调时 undefined */
   readonly subagentId?: SubagentId
 }
 ```
 
-### 3.4 `Subagent` runner (internal — not re-exported)
+### 3.4 `Subagent` 运行器(内部,不 re-export)
 
 ```ts
 export interface SubagentRunOptions {
   readonly id: SubagentId
   readonly type: SubagentType
   readonly parentTurnId: string
-  readonly parentCallId: string         // the main-agent Task tool_use id
+  readonly parentCallId: string         // 主 agent 调 Task 的那次 tool_use id
   readonly userPrompt: string
   readonly userDescription: string
   readonly parentSignal: AbortSignal
-  readonly parentCtx: ToolExecContext   // settings, approval, todoStore, etc. carried forward
+  readonly parentCtx: ToolExecContext   // 主 agent 的 ctx(settings/approval/todoStore 等)
   readonly llm: OpenAICompatibleClient
   readonly emit: (ev: SubagentEvent) => void
 }
@@ -172,7 +170,7 @@ export interface SubagentRunResult {
 
 export class Subagent {
   constructor(private opts: SubagentRunOptions) {}
-  async run(): Promise<SubagentRunResult>  // throws AbortError or SubagentFailedError
+  async run(): Promise<SubagentRunResult>  // 抛 AbortError 或 SubagentFailedError
 }
 
 export class SubagentFailedError extends Error {
@@ -181,7 +179,7 @@ export class SubagentFailedError extends Error {
 }
 ```
 
-### 3.5 `Task` tool factory (`core/subagent/taskTool.ts`)
+### 3.5 `Task` tool 工厂(`core/subagent/taskTool.ts`)
 
 ```ts
 export function buildTaskTool(
@@ -190,10 +188,10 @@ export function buildTaskTool(
 ): ToolDefinition<TaskInput, string>
 ```
 
-Returned tool:
+返回的 tool:
 
 - `name: 'Task'`
-- `description` — dynamically composed from registry, e.g.:
+- `description` —— 由 registry 动态拼出,示例:
 
   ```
   Spawns a sub-agent to handle a focused sub-task with isolated context.
@@ -216,38 +214,38 @@ Returned tool:
   ```
 
 - `execute(input, ctx)`:
-  1. Generate `subagentId = uuid()`.
-  2. Resolve `type = registry.get(input.subagent_type)`.
-  3. `new Subagent({ id: subagentId, type, parentTurnId: ctx.turnId, parentCallId: ctx.callId, userPrompt: input.prompt, userDescription: input.description, parentSignal: ctx.signal, parentCtx: ctx, llm, emit }).run()`.
-  4. On success → `makeOk(result.text)`.
-  5. On `AbortError` → re-throw (QueryEngine handles).
-  6. On `SubagentFailedError` → `makeError('subagent_failed', \`Subagent ${type.name} failed: ${err.message}. The sub-task was not completed.\`, /*retryable*/ false)`.
+  1. 生成 `subagentId = uuid()`。
+  2. resolve `type = registry.get(input.subagent_type)`。
+  3. `new Subagent({ id: subagentId, type, parentTurnId: ctx.turnId, parentCallId: ctx.callId, userPrompt: input.prompt, userDescription: input.description, parentSignal: ctx.signal, parentCtx: ctx, llm, emit }).run()`。
+  4. 成功 → `makeOk(result.text)`。
+  5. `AbortError` → 重抛(QueryEngine 自己处理)。
+  6. `SubagentFailedError` → `makeError('subagent_failed', \`Subagent ${type.name} failed: ${err.message}. The sub-task was not completed.\`, /*retryable*/ false)`。
 
-> **Pre-req from existing kernel:** `ctx.turnId` and `ctx.callId` must be present on `ToolExecContext`. If they aren't today, add them in the same task that introduces the Task tool — they're standard agent-loop identifiers and several upcoming features want them.
+> **kernel 前置条件:** `ctx.turnId` 和 `ctx.callId` 必须在 `ToolExecContext` 上。如果今天还没有,引入 Task tool 的同一个 task 内补上 —— 它们是标准 agent-loop 标识符,后面几个特性都会要。
 
-## 4. Event Protocol
+## 4. 事件协议
 
-### 4.1 Core variants (`core/protocol.ts`, added to `AgentEvent` union)
+### 4.1 Core 变体(`core/protocol.ts`,加入 `AgentEvent` union)
 
 ```ts
-// Sub-agent started
+// 子 agent 启动
 { type: 'subagent/started',
   subagentId: SubagentId,
   parentTurnId: string,
-  parentCallId: string,       // main-agent's Task tool_use id
+  parentCallId: string,        // 主 agent 调 Task 的 tool_use id
   subagentType: string,
   description: string,
   prompt: string,
   startedAt: number }
 
-// One assistant message inside the sub-agent
+// 子 agent 内部的一条 assistant message
 { type: 'subagent/message',
   subagentId: SubagentId,
   role: 'assistant',
   content: ContentBlock[],
   ts: number }
 
-// A tool call inside the sub-agent
+// 子 agent 内部的 tool 调用开始
 { type: 'subagent/tool_call',
   subagentId: SubagentId,
   callId: string,
@@ -255,7 +253,7 @@ Returned tool:
   args: unknown,
   ts: number }
 
-// A tool call result inside the sub-agent
+// 子 agent 内部的 tool 调用结束
 { type: 'subagent/tool_end',
   subagentId: SubagentId,
   callId: string,
@@ -264,37 +262,37 @@ Returned tool:
   error?: { code: string; message: string },
   ts: number }
 
-// Sub-agent finished (success / failure / abort)
+// 子 agent 结束(成功 / 失败 / 取消)
 { type: 'subagent/finished',
   subagentId: SubagentId,
   ok: boolean,
-  text?: string,                                // present when ok: true
-  error?: { code: string; message: string },    // present when ok: false
+  text?: string,                                // ok: true 时有
+  error?: { code: string; message: string },    // ok: false 时有
   iterations: number,
   finishedAt: number }
 ```
 
-### 4.2 Wire variants (`browser/rpc/protocol.ts`)
+### 4.2 Wire 变体(`browser/rpc/protocol.ts`)
 
-Same five variants, each wrapped in the standard envelope (`id`, `sessionId`, `ts`) per existing wire-protocol conventions. Validated by Zod and added to the wire `AgentEvent` discriminated union.
+同样 5 个变体,每个套上标准 envelope(`id`、`sessionId`、`ts`),与 wire 协议现有惯例一致。用 Zod 验证后加入 wire 端 `AgentEvent` 判别联合。
 
-### 4.3 Event ordering guarantees
+### 4.3 事件顺序保证
 
-- `subagent/started` is emitted **before** any other `subagent/*` event for a given `subagentId`.
-- `subagent/finished` is emitted **exactly once** per `subagentId`.
-- All other `subagent/*` events for that id appear strictly between `started` and `finished`.
-- The main-agent `tool_end` for the corresponding `Task` callId is emitted **after** the matching `subagent/finished`.
+- 同一个 `subagentId` 下,`subagent/started` 一定是**第一个** `subagent/*` 事件。
+- 同一个 `subagentId` 下,`subagent/finished` **恰好出现一次**。
+- 该 id 的其他 `subagent/*` 事件全部严格出现在 `started` 和 `finished` 之间。
+- 主 agent 端对应 `Task` callId 的 `tool_end` **晚于**对应的 `subagent/finished`。
 
-### 4.4 Example timeline (2 concurrent Tasks)
+### 4.4 时序示例(并发 2 个 Task)
 
 ```
 turn/start
-message              (main agent emits 2 tool_use blocks)
+message              (主 agent 输出 2 个 tool_use)
 tool_call            (Task, callId=cA)
 tool_call            (Task, callId=cB)
 subagent/started     (id=A, parentCallId=cA)
 subagent/started     (id=B, parentCallId=cB)
-subagent/message     (id=A, …)                ← interleaved
+subagent/message     (id=A, …)                ← 并发交错
 subagent/tool_call   (id=A, …)
 subagent/message     (id=B, …)
 subagent/tool_end    (id=A, …)
@@ -302,53 +300,53 @@ subagent/finished    (id=A, ok=true, text=…)
 tool_end             (Task, callId=cA, ok=true, content=A.text)
 subagent/finished    (id=B, ok=true, text=…)
 tool_end             (Task, callId=cB, ok=true, content=B.text)
-message              (main agent continues with both tool_results)
+message              (主 agent 拿到两个 tool_result 后继续)
 …
 turn/end
 ```
 
-## 5. Cancellation, Failure, Limits
+## 5. 取消、失败、限制
 
-### 5.1 Cancellation
+### 5.1 取消传播
 
-- Each `Subagent` constructs its own `AbortController`. It listens to `parentSignal.abort` and forwards by calling `childController.abort(parentSignal.reason)`.
-- When user cancels the turn (wire `cancelTurn`), main `AgentSession.signal` aborts → all in-flight sub-agents abort → their child LLM fetches and tool executions abort.
-- On abort: emit `subagent/finished({ ok: false, error: { code: 'aborted', message: 'Sub-agent aborted' } })` so the UI can show a clean "cancelled" badge.
+- 每个 `Subagent` 自带 `AbortController`。监听 `parentSignal.abort`,触发后调 `childController.abort(parentSignal.reason)`。
+- 用户点 UI"停止"按钮(wire `cancelTurn`)→ 主 `AgentSession.signal` abort → 所有进行中的子 agent 同步 abort → 子 LLM fetch 和 tool execution 全部中止。
+- 被 abort 时 emit `subagent/finished({ ok: false, error: { code: 'aborted', message: 'Sub-agent aborted' } })`,UI 可以渲"已取消"badge。
 
-### 5.2 Per-sub-agent failure
+### 5.2 单个子 agent 失败
 
-- A failure in one sub-agent does **not** affect concurrent siblings (each has its own promise + own AbortController; the controllers are linked from parent → child, not child → child).
-- Failures surface to the main LLM via `tool_result.is_error = true` with the standard message format:
+- 一个子 agent 失败**不影响**并发的兄弟(各自独立 promise + 独立 AbortController;controller 链是 parent → 各 child,child 之间无连接)。
+- 失败通过 `tool_result.is_error = true` 反馈给主 LLM,标准文案:
 
   ```
   Subagent <type> failed: <reason>. The sub-task was not completed.
   ```
 
-  The main LLM then decides whether to retry with a different prompt, use a different type, or give up and report to the user.
+  主 LLM 自己决定重试、换 type、放弃报告等。
 
 ### 5.3 `maxIterations`
 
-- Sub-agent uses `type.maxIterations ?? defaultMaxIterations` (the kernel-wide default already used by `QueryEngine`).
-- "Reached max iterations without a final assistant text" → throws `SubagentFailedError('max_iterations_no_result')`.
-- "Reached max iterations *with* assistant text" — treated as normal completion (the LLM produced an answer, even if it also wanted to keep tool-calling). Matches current `QueryEngine` semantics.
+- 子 agent 用 `type.maxIterations ?? defaultMaxIterations`(kernel 全局默认,沿用 `QueryEngine`)。
+- "跑完 maxIterations 仍没出最终 assistant 文字" → 抛 `SubagentFailedError('max_iterations_no_result')`。
+- "跑完 maxIterations,有 assistant 文字但还想继续 tool call" → 视为正常完成(LLM 已经给出答案)。与现有 `QueryEngine` 语义一致。
 
-### 5.4 Tool errors inside a sub-agent
+### 5.4 子 agent 内部的 tool error
 
-- A `ToolResult.error` from a tool inside the sub-agent is **not** a sub-agent failure. It flows back to the sub-agent's LLM as `tool_result.is_error = true` (same path as the main agent), and the sub-LLM decides what to do.
-- Only if errors prevent the sub-LLM from ever producing a final text and `maxIterations` is hit does the sub-agent itself fail.
+- tool 内部 `ToolResult.error` **不**算子 agent 失败。与主 agent 路径一致:错误通过 `tool_result.is_error = true` 喂回子 LLM,由子 LLM 自己决定下一步。
+- 只有 tool 错误累积到子 LLM 始终给不出最终文字、`maxIterations` 跑光,才算子 agent 整体失败。
 
-### 5.5 No wall-clock timeout
+### 5.5 不内置 wall-clock 超时
 
-- Per-request `fetchTimeoutMs` (existing) + `maxIterations` + manual cancel cover all needs. No new global timeout.
+- per-request `fetchTimeoutMs` + `maxIterations` + 手动取消已经覆盖所有需要。不引入额外全局 timeout。
 
-### 5.6 Concurrency
+### 5.6 并发上限
 
-- v1: kernel enforces no concurrency limit. `Promise.all` over the main LLM's parallel `Task` tool_use blocks is the only mechanism, and the LLM rarely emits more than 4 in a single turn.
-- `SubagentType.maxConcurrent` is reserved in the type definition for future use but **unread** in v1. Documented as such with a `// reserved for future use` comment.
+- v1 **kernel 不限**。`Promise.all` 配合主 LLM parallel-tool-calls 是唯一通路,主 LLM 实际一个 turn 极少超过 4 个 `Task`。
+- `SubagentType.maxConcurrent` 字段位预留,v1 不读,加注释 `// reserved for future use`,避免后期破坏 wire schema。
 
-## 6. Consumer Integration (mycli-web)
+## 6. Consumer 集成(mycli-web)
 
-### 6.1 Reference type — `general-purpose`
+### 6.1 Reference 类型 —— `general-purpose`
 
 `packages/mycli-web/src/extension-tools/subagentTypes/generalPurpose.ts`:
 
@@ -384,7 +382,7 @@ import { generalPurpose } from './generalPurpose'
 export const allSubagentTypes = [generalPurpose] as const
 ```
 
-### 6.2 Offscreen wiring
+### 6.2 Offscreen 接线
 
 `packages/mycli-web/src/extension/offscreen.ts`:
 
@@ -392,19 +390,19 @@ export const allSubagentTypes = [generalPurpose] as const
 import { allSubagentTypes } from '@ext-tools/subagentTypes'
 
 bootKernelOffscreen({
-  // …existing options
+  // …已有选项
   subagentTypes: allSubagentTypes,
 })
 ```
 
-### 6.3 UI: `SubagentCard.tsx`
+### 6.3 UI:`SubagentCard.tsx`
 
-New component, rendered inside the main-agent message list whenever a main-agent `tool_call` has `toolName === 'Task'`. The card subscribes to the matching `subagentId` (resolved via `parentCallId → subagentId` mapping built from `subagent/started` events) and renders:
+新组件。主 agent 消息列表里遇到 `toolName === 'Task'` 的 tool_call 时渲染。卡片通过 `parentCallId → subagentId` 映射(由 `subagent/started` 事件构建)订阅对应 `subagentId`,渲染:
 
-- Collapsed: type badge, short `description`, status (running / done / failed / aborted), final text preview when done.
-- Expanded: full timeline of sub-agent messages and tool calls (re-using the same message/tool-call presentational components as the main chat).
+- 收起态:类型 badge、短 `description`、状态(running / done / failed / aborted)、完成后显示最终文字预览。
+- 展开态:子 agent 完整时间线(message + tool call),复用主 chat 的同款展示组件。
 
-### 6.4 ChatApp state
+### 6.4 ChatApp 状态
 
 ```ts
 interface SubagentState {
@@ -423,75 +421,75 @@ const [subagents, setSubagents] = useState<Map<string, SubagentState>>(new Map()
 const [callIdToSubagentId, setCallIdToSubagentId] = useState<Map<string, string>>(new Map())
 ```
 
-Event handling:
+事件处理:
 
-| Event | Action |
+| 事件 | 动作 |
 |---|---|
-| `subagent/started` | Insert into `subagents` map; record `callIdToSubagentId[parentCallId] = subagentId` |
-| `subagent/message` | Append `content` to `messages[]` |
-| `subagent/tool_call` | Set `toolCalls[callId] = { name, args }` |
-| `subagent/tool_end` | Update `toolCalls[callId]` with `result` or `error` |
-| `subagent/finished` | Set `status`, `finalText` or `error`, retain entry for history |
-| `chat/turn_reset` (existing) | Clear both maps (matches `resetTurnState` pattern from #3) |
+| `subagent/started` | 写入 `subagents` map;`callIdToSubagentId[parentCallId] = subagentId` |
+| `subagent/message` | `messages[]` 追加 `content` |
+| `subagent/tool_call` | `toolCalls[callId] = { name, args }` |
+| `subagent/tool_end` | 更新 `toolCalls[callId]` 的 `result` 或 `error` |
+| `subagent/finished` | 更新 `status`、`finalText` 或 `error`,保留 entry 作历史 |
+| `chat/turn_reset`(已有) | 两个 map 都清空(沿用 #3 的 `resetTurnState` 模式) |
 
-### 6.5 Rendering Task tool-call cards
+### 6.5 主 agent Task 卡片渲染
 
-In `MessageList.tsx` (or `ToolCallCard.tsx`): when iterating tool-call entries, if `toolName === 'Task'`, look up `subagentId = callIdToSubagentId.get(callId)`; if present, render `<SubagentCard state={subagents.get(subagentId)} />`. Otherwise, render the generic `ToolCallCard` (early-in-turn fallback before `subagent/started` arrives).
+`MessageList.tsx`(或 `ToolCallCard.tsx`):遍历 tool_call 时,若 `toolName === 'Task'`,查 `subagentId = callIdToSubagentId.get(callId)`;命中 → 渲 `<SubagentCard state={subagents.get(subagentId)} />`;否则 fallback 到通用 `<ToolCallCard>`(turn 早期 `subagent/started` 还没到时的过渡状态)。
 
-## 7. Testing Strategy
+## 7. 测试策略
 
-### 7.1 Kernel (`packages/agent-kernel/tests/core/subagent/`)
+### 7.1 Kernel(`packages/agent-kernel/tests/core/subagent/`)
 
-1. **`SubagentType.test.ts`** — `buildSubagentTypeRegistry`: ok path, duplicate name throws, invalid name format throws, empty array returns empty map.
-2. **`taskTool.test.ts`** — Factory: description contains all type names; input schema rejects unknown `subagent_type`; empty registry handled by `bootKernelOffscreen` skipping Task tool registration (asserted in test #5).
-3. **`Subagent.test.ts`** — With mocked `OpenAICompatibleClient` and in-memory tool registry:
-   - Success: LLM emits one assistant text → returns it.
-   - Multi-turn with tool calls → final text returned.
-   - `maxIterations` exhausted without text → `SubagentFailedError('max_iterations_no_result')`.
-   - LLM throws → `SubagentFailedError('llm_error')`.
-   - Parent signal aborts → child aborts synchronously → re-throws `AbortError`.
-   - Tool registry filter: Task tool always removed even with `allowedTools: '*'`.
-   - Tool registry filter: tool not in whitelist is invisible to sub-agent.
-   - Child `ToolExecContext.conversationId === subagentId`.
-   - Emit order: `started` → (`message` / `tool_call` / `tool_end`)\* → `finished`, exactly once each for `started` and `finished`.
-4. **`agentService.subagent.test.ts`** — End-to-end through `agentService`:
-   - Scripted main-LLM that emits one `Task` tool_use → assert wire event order: `tool_call(Task)` → `subagent/started` → `subagent/message` → `subagent/finished` → `tool_end(Task, content=text)`.
-   - Two concurrent `Task` calls → two `subagent/*` streams properly separated by id, no cross-contamination.
+1. **`SubagentType.test.ts`** —— `buildSubagentTypeRegistry`:正常路径、重名抛错、名字格式非法抛错、空数组返回空 map。
+2. **`taskTool.test.ts`** —— 工厂行为:description 包含所有 type 名;input schema 拒收未知 `subagent_type`;空 registry 由 `bootKernelOffscreen` 跳过 Task tool 注册(在测试 5 验证)。
+3. **`Subagent.test.ts`** —— 用 mocked `OpenAICompatibleClient` + 内存 tool registry:
+   - 成功路径:LLM 输出一条 assistant 文字 → 返回。
+   - 多轮 tool 调用 → 返回最终文字。
+   - `maxIterations` 跑光无文字 → 抛 `SubagentFailedError('max_iterations_no_result')`。
+   - LLM 抛错 → 抛 `SubagentFailedError('llm_error')`。
+   - 父 signal abort → 子同步 abort → 重抛 `AbortError`。
+   - tool 过滤:即使 `allowedTools: '*'`,Task tool 也一定被移除。
+   - tool 过滤:白名单外的 tool 子 agent 看不到。
+   - 子 `ToolExecContext.conversationId === subagentId`。
+   - emit 顺序:`started` → (`message` / `tool_call` / `tool_end`)\* → `finished`,`started` 和 `finished` 各恰好一次。
+4. **`agentService.subagent.test.ts`** —— 通过 `agentService` 端到端:
+   - 脚本化主 LLM 派 1 个 Task → 断言 wire 事件顺序:`tool_call(Task)` → `subagent/started` → `subagent/message` → `subagent/finished` → `tool_end(Task, content=text)`。
+   - 并发 2 个 Task → 两条 `subagent/*` 流按 id 分流,无串号。
 5. **`bootKernelOffscreen.subagent.test.ts`**:
-   - `subagentTypes` omitted → Task tool not registered, registry does not contain `Task`.
-   - `subagentTypes: []` → same as omitted.
-   - `subagentTypes: [generalPurpose]` → Task tool registered, description contains `'general-purpose'`.
+   - 不传 `subagentTypes` → Task tool 未注册,registry 不含 `Task`。
+   - `subagentTypes: []` → 同上。
+   - `subagentTypes: [generalPurpose]` → Task tool 注册,description 含 `'general-purpose'`。
 
-### 7.2 Consumer (`packages/mycli-web/tests/`)
+### 7.2 Consumer(`packages/mycli-web/tests/`)
 
-6. **`subagentTypes.test.ts`** — Static guard: every name in `generalPurpose.allowedTools` exists in the actual extension-tools registry. Catches drift when tools are renamed.
-7. **`ChatApp.subagent.test.tsx`** *(optional, push to follow-up if UI testing infra is heavy)* — Feed a scripted event stream and assert `SubagentCard` rendering + state transitions.
+6. **`subagentTypes.test.ts`** —— 静态守护:`generalPurpose.allowedTools` 里的每个 tool 名都真实存在于 extension-tools registry。防 rename 漂移。
+7. **`ChatApp.subagent.test.tsx`** *(可选,如果 UI 测试基础设施太重可推到 follow-up)* —— 喂入脚本化事件流,断言 `SubagentCard` 渲染 + 状态切换。
 
-### 7.3 Coverage target
+### 7.3 覆盖率目标
 
-- New kernel lines ≥ 90% covered.
-- Critical paths (spawn, cancel, fail) 100% line coverage.
+- kernel 新增代码行覆盖率 ≥ 90%。
+- 关键路径(spawn / cancel / fail)行覆盖 100%。
 
-### 7.4 No live-LLM tests
+### 7.4 不打真实 LLM
 
-All tests mock `OpenAICompatibleClient`. Reuse existing `tests/setup.ts` mocks for `fake-indexeddb` and `chrome.*`. If `mockOpenAIClient(scriptedResponses)` helper does not already exist in kernel tests, add it as part of the Subagent test task.
+全部测试 mock `OpenAICompatibleClient`。沿用现有 `tests/setup.ts` 的 `fake-indexeddb` 和 `chrome.*` mock。若 kernel tests 里还没有 `mockOpenAIClient(scriptedResponses)` helper,作为 Subagent 测试 task 的一部分补上。
 
-## 8. Open Questions / Risks
+## 8. Open Questions / 风险
 
-| Item | Risk | Mitigation |
+| 项 | 风险 | 缓解 |
 |---|---|---|
-| `ctx.turnId` / `ctx.callId` may not yet be on `ToolExecContext` | Task tool can't emit `parentTurnId` / `parentCallId` | First implementation task adds these fields (small, kernel-only) and `agentService` populates them |
-| LLM provider parallel-tool-calls semantics | If the OpenAI-compatible endpoint doesn't honor `parallel_tool_calls`, sub-agents serialize | Not a kernel concern — already a property of the LLM client. Sub-agent feature still works, just one at a time |
-| Event volume from chatty sub-agents | UI / wire overhead | `subagent/*` events are the same volume as the sub-agent's own message stream — no amplification. Acceptable for v1 |
-| UI `parentCallId → subagentId` race | Main-agent `tool_call` arrives before `subagent/started` | UI falls back to generic `<ToolCallCard>` until the mapping is known, then swaps to `<SubagentCard>` |
+| `ctx.turnId` / `ctx.callId` 可能还不在 `ToolExecContext` 上 | Task tool 无法 emit `parentTurnId` / `parentCallId` | 第一个实施 task 同时补这两个字段(改动小,纯 kernel),`agentService` 负责填值 |
+| LLM provider 的 parallel-tool-calls 语义 | OpenAI-兼容 endpoint 若不支持 `parallel_tool_calls`,子 agent 会串行 | 不是 kernel 关心的事 —— 已经是 LLM 客户端属性。子 agent 机制仍工作,只是每次一个 |
+| 子 agent 事件量大 | UI / wire 开销 | `subagent/*` 事件量等于子 agent 自己的 message 流,无放大。v1 可接受 |
+| UI `parentCallId → subagentId` 竞态 | 主 agent `tool_call` 比 `subagent/started` 先到 | UI 在映射建立前用通用 `<ToolCallCard>` 占位,映射就绪后切到 `<SubagentCard>` |
 
-## 9. Out of Scope (Explicit Restatement)
+## 9. 明确排除(再次声明)
 
-- Recursive Task calls
-- Persisting sub-agent transcripts to IndexedDB
-- Wall-clock timeouts
-- Cross–service-worker-restart resume
-- Independent LLM providers per sub-agent (only `model` name override is supported, sharing the same client)
-- Skills inside sub-agents
-- UI for managing custom sub-agent types (settings page, etc.)
-- `maxConcurrent` enforcement
+- 递归 Task 调用
+- 子 agent 中间消息持久化到 IndexedDB
+- wall-clock 超时
+- 跨 service-worker 重启续跑
+- 每个子 agent 独立 LLM provider(只支持 `model` 名字覆盖,共享同一 client)
+- 子 agent 内部 skills 加载
+- 自定义 subagent type 的 UI 管理界面(settings 页等)
+- `maxConcurrent` 强制执行
