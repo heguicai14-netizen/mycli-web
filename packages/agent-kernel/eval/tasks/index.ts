@@ -21,11 +21,20 @@ import { task as decomposition }      from './L3-complex/decomposition.task'
 import { task as recoverAndReplan }   from './L3-complex/recover-and-replan.task'
 import { task as expGoNoGo }          from './L3-complex/exp-go-no-go.task'
 
+import { task as parallelIssueTriage }    from './L4-subagent/parallel-issue-triage.task'
+import { task as crossPageSynthesis }     from './L4-subagent/cross-page-synthesis.task'
+import { task as iterativeResearch }      from './L4-subagent/iterative-research.task'
+import { task as distractorResistance }   from './L4-subagent/distractor-resistance.task'
+import { task as failIsolation }          from './L4-subagent/fail-isolation.task'
+import { task as overDecompositionTrap }  from './L4-subagent/over-decomposition-trap.task'
+
 export const builtinSuite: Suite = [
   extractTitle, extractSelection, listTabs, getBySelector, fetchJson, screenshot,
   issueSummary, crossTabCompare, fetchThenExtract, conditionalBranch,
   multiStepExtract, failThenFallback, expTreatmentReadout, expCrossValidate,
   skillOrchestration, decomposition, recoverAndReplan, expGoNoGo,
+  parallelIssueTriage, crossPageSynthesis, iterativeResearch,
+  distractorResistance, failIsolation, overDecompositionTrap,
 ]
 
 // IDs that smoke mode runs (PR-time, with replay)
@@ -34,6 +43,8 @@ export const smokeIds: string[] = [
       'L1/get-by-selector', 'L1/fetch-json', 'L1/screenshot-describe'],
   'L2/issue-summary',
   'L2/exp-treatment-readout',
+  'L4/over-decomposition-trap',
+  'L4/parallel-issue-triage',
 ]
 
 export function filterSuite(
