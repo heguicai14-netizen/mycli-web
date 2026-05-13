@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Fab } from './fab'
 import { ChatWindow } from '../ui/ChatWindow'
 import { ApprovalModal, type PendingApproval } from '../ui/ApprovalModal'
+import { TodoList } from '../ui/TodoList'
 import type { DisplayMessage, DisplayToolCall } from '../ui/MessageList'
+import type { TodoItem } from 'agent-kernel'
 import type { ConversationItem } from '../ui/ConversationList'
 import { RpcClient } from 'agent-kernel'
 import { getTransientUi, setTransientUi } from '../storage/transient'
@@ -32,6 +34,7 @@ export function ChatApp() {
   const [conversations, setConversations] = useState<ConversationItem[]>([])
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null)
+  const [todos, setTodos] = useState<TodoItem[]>([])
   const clientRef = useRef<RpcClient | null>(null)
   const lastAssistantIdRef = useRef<string | null>(null)
 
@@ -276,6 +279,10 @@ export function ChatApp() {
         })
       })
 
+      client.on('todo/updated', (ev) => {
+        setTodos(ev.items ?? [])
+      })
+
       // Resubscribe to the active conversation so reopening the chat or
       // navigating between pages restores prior messages from IDB.
       try {
@@ -370,6 +377,7 @@ export function ChatApp() {
     setBusy(false)
     setErrorBanner(undefined)
     setPendingApproval(null)
+    setTodos([])
   }
 
   function newConversation() {
@@ -433,6 +441,7 @@ export function ChatApp() {
           onDeleteConversation={deleteConversation}
         />
       )}
+      <TodoList items={todos} />
       <ApprovalModal pending={pendingApproval} onReply={replyApproval} />
     </>
   )
