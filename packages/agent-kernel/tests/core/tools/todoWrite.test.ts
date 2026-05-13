@@ -75,6 +75,7 @@ describe('todoWriteTool', () => {
     if (!res.ok) {
       expect(res.error.code).toBe('todo_persist_failed')
       expect(res.error.message).toMatch(/idb boom/)
+      expect(res.error.retryable).toBe(true)
     }
   })
 })

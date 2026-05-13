@@ -1,5 +1,7 @@
 // 中央类型定义。Plan B 抽核之后唯一的 agent 类型来源。
 
+import type { TodoStoreAdapter } from '../adapters/TodoStoreAdapter'
+
 export type Uuid = string
 
 export type ConversationId = Uuid
@@ -69,7 +71,7 @@ export type TodoStatus = 'pending' | 'in_progress' | 'completed'
 export interface ToolExecContext {
   signal?: AbortSignal
   /** Per-conversation todo store. Injected by agentService for tools that need it. */
-  todoStore?: import('../adapters/TodoStoreAdapter').TodoStoreAdapter
+  todoStore?: TodoStoreAdapter
   /** Active conversation id. Undefined for ephemeral turns. */
   conversationId?: ConversationId
 }

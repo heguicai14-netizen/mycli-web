@@ -50,6 +50,7 @@ a time. The list is per-conversation and persists across page reloads.`,
       return makeError(
         'todo_persist_failed',
         e instanceof Error ? e.message : String(e),
+        true,
       )
     }
   },
