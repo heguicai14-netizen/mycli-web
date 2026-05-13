@@ -55,6 +55,63 @@ function checkAssertion(a: TraceAssertion, trace: RunTrace): { ok: boolean; reas
     const ok = i === a.sequence.length
     return { ok, reason: `tool-order(${a.sequence.join(',')}): actual=${names.join(',')}` }
   }
+  // --- subagent-* ---
+  if (a.kind === 'subagent-spawned') {
+    const spawns = trace.steps.filter((s) => s.kind === 'subagent-spawn') as Array<Extract<typeof trace.steps[number], { kind: 'subagent-spawn' }>>
+    const matching = a.type ? spawns.filter((s) => s.type === a.type) : spawns
+    const min = a.minCount ?? 1
+    const max = a.maxCount ?? Infinity
+    const ok = matching.length >= min && matching.length <= max
+    return {
+      ok,
+      reason: `subagent-spawned(${a.type ? `type=${a.type}, ` : ''}min=${min}${a.maxCount ? `, max=${a.maxCount}` : ''}): actual=${matching.length}`,
+    }
+  }
+  if (a.kind === 'subagent-not-spawned') {
+    const spawns = trace.steps.filter((s) => s.kind === 'subagent-spawn')
+    return { ok: spawns.length === 0, reason: `subagent-not-spawned: actual=${spawns.length}` }
+  }
+  if (a.kind === 'subagent-parallel') {
+    const taskCalls = trace.steps.filter(
+      (s) => s.kind === 'tool-call' && s.name === 'Task',
+    ) as Array<Extract<typeof trace.steps[number], { kind: 'tool-call' }>>
+    const byBatch = new Map<string, number>()
+    for (const c of taskCalls) {
+      const k = c.batchId ?? '<no-batch>'
+      byBatch.set(k, (byBatch.get(k) ?? 0) + 1)
+    }
+    const maxInBatch = Math.max(0, ...byBatch.values())
+    return {
+      ok: maxInBatch >= a.minCount,
+      reason: `subagent-parallel(min=${a.minCount}): max-in-batch=${maxInBatch}`,
+    }
+  }
+  if (a.kind === 'subagent-final-ok') {
+    const okSpawns = (trace.steps.filter((s) => s.kind === 'subagent-spawn') as Array<Extract<typeof trace.steps[number], { kind: 'subagent-spawn' }>>).filter((s) => s.ok)
+    const min = a.minCount ?? 1
+    return { ok: okSpawns.length >= min, reason: `subagent-final-ok(min=${min}): actual=${okSpawns.length}` }
+  }
+  // --- todo-* ---
+  if (a.kind === 'todo-written') {
+    const todoCalls = calls.filter((c) => c.name === 'todoWrite')
+    if (todoCalls.length === 0) return { ok: false, reason: 'todo-written: no todoWrite call' }
+    const last = todoCalls[todoCalls.length - 1]
+    const items = (last.args as any)?.items
+    const count = Array.isArray(items) ? items.length : 0
+    const min = a.minItems ?? 1
+    return { ok: count >= min, reason: `todo-written(min=${min}): actual=${count}` }
+  }
+  if (a.kind === 'todo-final-status') {
+    const todoCalls = calls.filter((c) => c.name === 'todoWrite')
+    if (todoCalls.length === 0) return { ok: false, reason: 'todo-final-status: no todoWrite call' }
+    const last = todoCalls[todoCalls.length - 1]
+    const items: any[] = Array.isArray((last.args as any)?.items) ? (last.args as any).items : []
+    if (a.allCompleted) {
+      const allDone = items.length > 0 && items.every((i) => i?.status === 'completed')
+      return { ok: allDone, reason: `todo-final-status(allCompleted): actual=${items.map((i) => i?.status).join(',')}` }
+    }
+    return { ok: true, reason: 'todo-final-status: no constraint' }
+  }
   // max-redundant-calls
   const buckets = new Map<string, number>()
   for (const c of calls) {
